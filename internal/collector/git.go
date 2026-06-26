@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tukesh/git-brief/internal/config"
+	"github.com/tukesh1/git-brief/internal/config"
 )
 
 // CommitData holds information about a single git commit.

@@ -1,4 +1,4 @@
-module github.com/tukesh/git-brief
+module github.com/tukesh1/git-brief
 
 go 1.22.2
 

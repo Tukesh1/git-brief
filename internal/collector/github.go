@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v62/github"
-	"github.com/tukesh/git-brief/internal/config"
+	"github.com/tukesh1/git-brief/internal/config"
 )
 
 // PRData holds information about a single GitHub pull request.

@@ -8,7 +8,7 @@ import (
 
 // Version is injected at build time via:
 //
-//	go build -ldflags="-X github.com/tukesh/git-brief/cmd.Version=v1.2.3"
+//	go build -ldflags="-X github.com/tukesh1/git-brief/cmd.Version=v1.2.3"
 //
 // It defaults to "dev" for local builds.
 var Version = "dev"

@@ -11,9 +11,9 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 	"google.golang.org/api/option"
 
-	"github.com/tukesh/git-brief/internal/collector"
-	"github.com/tukesh/git-brief/internal/config"
-	"github.com/tukesh/git-brief/internal/prompt"
+	"github.com/tukesh1/git-brief/internal/collector"
+	"github.com/tukesh1/git-brief/internal/config"
+	"github.com/tukesh1/git-brief/internal/prompt"
 )
 
 const aiTimeout = 60 * time.Second

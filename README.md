@@ -7,11 +7,11 @@
   <a href="LICENSE"
     ><img
       alt="License"
-      src="https://img.shields.io/github/license/tukesh/git-brief?style=flat-square"
+      src="https://img.shields.io/github/license/tukesh1/git-brief?style=flat-square"
   /></a>
 </p>
 
-<h3 align="center">AI-powered daily standup, straight from your git log.</h3>
+<h3 align="center">Stop writing standup. You already logged the work..</h3>
 
 <br />
 
@@ -19,7 +19,6 @@
 $ git brief
 
 📋 brief — Thursday, June 26
-─────────────────────────────────
 
 Yesterday:
   • Fixed auth token expiry bug in /api/refresh (PR #234 merged)
@@ -33,7 +32,6 @@ Today:
 Blockers:
   None
 
-─────────────────────────────────
 📋 Copied to clipboard. Paste into Slack.
 ```
 
@@ -70,13 +68,13 @@ One AI call per run. No chat, no back-and-forth, no wasted tokens.
 ### Go install (recommended)
 
 ```sh
-go install github.com/tukesh/git-brief@latest
+go install github.com/tukesh1/git-brief@latest
 ```
 
 ### Build from source
 
 ```sh
-git clone https://github.com/tukesh/git-brief.git
+git clone https://github.com/tukesh1/git-brief.git
 cd git-brief
 make install
 ```
@@ -91,11 +89,11 @@ $ git brief init
 
   Welcome to git-brief setup!
 
-  ? LLM provider: Google (Gemini) — free tier available
+  ? LLM provider: Google 
   ? Gemini API Key: ********
   ? Enable GitHub PR integration? Yes
   ? GitHub Personal Access Token: ********
-  ? GitHub username: tukesh
+  ? GitHub username: tukesh1
 
   ✅ Setup complete!
 

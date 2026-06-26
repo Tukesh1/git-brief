@@ -7,7 +7,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/tukesh/git-brief/internal/config"
+	"github.com/tukesh1/git-brief/internal/config"
 )
 
 var initCmd = &cobra.Command{

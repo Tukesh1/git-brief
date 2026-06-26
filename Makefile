@@ -1,5 +1,5 @@
 BINARY    := git-brief
-MODULE    := github.com/tukesh/git-brief
+MODULE    := github.com/tukesh1/git-brief
 CMD_PKG   := .
 
 # Installation directory — prefers ~/.local/bin so no sudo is needed.
