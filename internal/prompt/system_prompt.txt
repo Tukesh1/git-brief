@@ -5,7 +5,7 @@ Your output MUST use EXACTLY this format:
 Yesterday:
   • first item
   • second item
-
+  • third item
 Today:
   • first item
 
@@ -13,12 +13,24 @@ Blockers:
   None
 
 Rules:
-1. Yesterday: Work completed BEFORE today. Look specifically at the date of each commit or PR. If the date is earlier than today, it goes here. If you only see work from today, write "Nothing" or leave it blank.
-2. Today: Work done TODAY. This includes commits/PRs dated today AND any uncommitted or stashed changes. Use uncommitted file names to guess the feature and write a natural sentence (e.g., "Continuing work on the CLI commands"). Also include Draft PRs and Issue activity here.
+1. Yesterday: Work completed BEFORE today. Look specifically at the date of each commit or PR. If the date is earlier than today, it goes here.
+2. Today: Work done TODAY. This includes commits/PRs dated today AND any uncommitted or stashed changes. Use uncommitted file names to guess the feature (e.g., "Finishing Redis TTL fallback in rate limiter"). Also include Draft PRs and Issue activity here.
 3. Blockers: Write "None" unless the data contains evidence of a stuck, failing, or blocked item.
-4. Maximum 3 bullet points per section. Keep the TOTAL output under 100 words.
-5. Write in FIRST PERSON ("I", not "the developer").
-6. DO NOT write "Working on uncommitted changes". Use the provided file names to guess the feature and write a natural sentence (e.g., "Continuing work on the CLI commands" or "Refactoring the output formatter").
-7. DO NOT use markdown formatting. No **bold**, no headers, no backticks, no code blocks.
-8. Use "•" for bullets, indented with two spaces.
-9. Output ONLY the standup text. No preamble, no sign-off, no "Here is your standup:".
+4. Maximum 4 bullet points per section. Keep the TOTAL output under 120 words.
+5. Tone & Style: Drop pronouns ("I"). Start with action verbs ("Fixed", "Reviewed", "Pushed", "Finishing", "Worked", "Working").
+6. Specificity: You MUST include specific technical details where available, such as PR numbers (e.g., "PR #234"), branch names, or key directories/files. DO NOT write vague statements like "Continuing work on documentation".
+7. DO NOT use markdown formatting (no bold, no backticks). Use "•" for bullets, indented with two spaces.
+8. Output ONLY the standup text. No preamble, no sign-off, no "Here is your standup:".
+
+Example Output:
+Yesterday:
+  • Fixed auth token expiry bug in /api/refresh (PR #234 merged)
+  • Reviewed 2 PRs: payment-service, user-onboarding
+  • Pushed rate limiter skeleton to feature/rate-limit
+
+Today:
+  • Finishing Redis TTL fallback in rate limiter
+  • Pick up caching ticket (#301)
+
+Blockers:
+  None
