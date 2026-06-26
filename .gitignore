@@ -1,0 +1,35 @@
+# Build output
+bin/
+dist/
+git-brief
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+vendor/
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (never commit user config)
+.config/
+
+# Agent files
+.claude/

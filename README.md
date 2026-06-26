@@ -58,6 +58,13 @@ One command. Three seconds. Your standup is written and copied to clipboard.
 
 One AI call per run. No chat, no back-and-forth, no wasted tokens.
 
+### ✨ What it catches that others miss:
+- **Uncommitted work:** Captures modified files from your IDE using `git status`.
+- **Git Stashes:** Finds recent work you had to `git stash` and switch away from.
+- **Pair Programming:** Parses `Co-authored-by:` tags so you get credit when pairing.
+- **Rebase-aware:** Uses `Commit Date` instead of just Author Date so rebased commits aren't lost.
+- **GitHub Issues & Draft PRs:** Finds Open/Draft PRs you're working on and issues you've commented on, not just merged PRs.
+
 ## Install
 
 ### Go install (recommended)
