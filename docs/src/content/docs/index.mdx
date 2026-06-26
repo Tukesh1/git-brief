@@ -1,0 +1,40 @@
+---
+title: git brief
+description: Zero-overhead daily standups generated instantly from your local Git activity.
+template: splash
+hero:
+  tagline: Zero-overhead daily standups generated instantly from your local Git activity. No context switching, no web dashboards, just one CLI command.
+  actions:
+    - text: Get Started
+      link: /git-brief/start-here/introduction/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/Tukesh1/git-brief
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What makes git-brief different?
+
+<CardGrid stagger>
+	<Card title="Works where you work" icon="laptop">
+		Scans your local git repositories directly. No need to install invasive integrations into your enterprise source control.
+	</Card>
+	<Card title="Pair Programming Aware" icon="puzzle">
+		Automatically parses `Co-authored-by:` tags so you get full credit for pairing sessions, even if your colleague pushed the commits.
+	</Card>
+	<Card title="Catches Uncommitted Code" icon="magnifier">
+		Spent all day in your IDE without committing? `git brief` reads your working tree status and captures what you're actively modifying.
+	</Card>
+	<Card title="Stash Intelligence" icon="document">
+		It tracks your recent `git stash` history, meaning the WIP you had to shelve to fix a hotfix still gets reported on your standup.
+	</Card>
+	<Card title="Draft PR Tracking" icon="github">
+		Don't just get credit for merged code. It fetches Open and Draft PRs you're actively building, as well as Issues you're triaging.
+	</Card>
+	<Card title="Rebase Safe" icon="random">
+		Uses strict Commit Dates instead of Author Dates. If you wrote a commit on Monday but rebased it on Wednesday, it correctly appears on Wednesday's brief.
+	</Card>
+</CardGrid>
