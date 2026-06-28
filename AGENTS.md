@@ -113,6 +113,13 @@ git brief --no-slack              # Never open Slack
   clipboard → open the user's Slack client in the target channel → the user
   pastes and presses send. This keeps messages posted **as the user, never as a
   bot**, and gated behind explicit manual approval.
+- The Slack token is **optional and read-only**. Posting uses the user's
+  existing Slack session (they paste + press send), so no bot, no `chat:write`,
+  and no workspace-admin app-install is required to post.
+- Preferred config is a pasted channel link (`…/archives/C…`) or a bare channel
+  ID; `slack.ParseChannelURL` extracts the IDs with no API call, so the
+  non-admin/no-token path is first-class. A token is only needed to resolve a
+  `#name`.
 - `internal/slack` uses the user token (`xoxp-…`) only for lookups
   (`auth.test` for the team ID, `conversations.list` to resolve a `#name` to an
   ID). It never calls `chat.postMessage`.

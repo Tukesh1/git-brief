@@ -127,14 +127,24 @@ client opens directly in the target channel, where *you* paste it and press
 send. The message is therefore always posted **as you (never as a bot)** and
 nothing leaves your machine until you hit Enter in Slack.
 
-Enable it during `git brief init` (or edit `~/.config/git-brief/config.json`):
+> **No bot, no admin, no write token.** Posting uses your *existing* Slack
+> session, so you don't need a workspace admin to install an app or grant any
+> `chat:write` scope. The hand-off only needs to know *which* channel to open.
+
+### Recommended setup (no token, works for everyone)
+
+In Slack, open the channel ▸ click its name ▸ **Copy link**. Paste that link as
+your `slack_channel` during `git brief init` (or edit
+`~/.config/git-brief/config.json`):
 
 ```jsonc
 {
-  "slack_token": "xoxp-…",      // a *user* token, used only to look up the channel/team
-  "slack_channel": "#announcements" // a #name, or a channel ID like C0123ABCD
+  "slack_channel": "https://acme.slack.com/archives/C0123ABCD"
 }
 ```
+
+A bare channel ID (`C0123ABCD`) works too. Any workspace member can copy a
+channel link — no admin rights required.
 
 Then:
 
@@ -144,12 +154,24 @@ git brief --slack    # skip the prompt and open Slack straight away
 git brief --no-slack # generate the brief but never touch Slack
 ```
 
-Notes:
-- The `slack_token` is optional but recommended — it resolves a `#name` to the
-  right channel and finds your workspace so the **desktop app** opens directly.
-  Without a token, configure `slack_channel` as a channel **ID** (`C…`).
-- If Slack can't be opened automatically (e.g. on a headless box), the channel
-  link is printed so you can open it yourself.
+### Optional: a `#name` shortcut
+
+If you'd rather store `slack_channel` as a friendly `#name`, git-brief needs a
+**read-only user token** (`xoxp-…`) to translate that name into a channel ID:
+
+```jsonc
+{
+  "slack_token": "xoxp-…",            // optional, read-only; never used to post
+  "slack_channel": "#announcements"
+}
+```
+
+Heads up: obtaining a user token means installing a small Slack app, which some
+workspaces gate behind admin approval. If that's a hassle, just use the
+channel-link/ID setup above — it needs no token at all.
+
+If Slack can't be opened automatically (e.g. on a headless box), the channel
+link is printed so you can open it yourself.
 
 ## Supported AI Providers
 
