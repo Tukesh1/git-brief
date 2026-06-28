@@ -127,20 +127,41 @@ func maybePostToSlack(ctx context.Context, brief string) {
 		}
 	}
 
-	channelID := channel
-	teamID := ""
-	if token := config.Cfg.SlackToken; token != "" {
-		client := slack.NewClient(token)
-		if id, err := client.ResolveChannel(ctx, channel); err == nil {
-			channelID = id
+	// Decide what to open. The token is entirely optional and read-only — it is
+	// only used to turn a #name into a channel ID. Employees who are not
+	// workspace admins (and so cannot install an app to get a token) can simply
+	// paste a channel link (Slack ▸ channel ▸ Copy link) or a channel ID.
+	var openTarget, webLink string
+
+	if _, _, ok := slack.ParseChannelURL(channel); ok {
+		// User pasted a Slack link copied from the app: open it as-is. It needs
+		// no token and already routes to the correct workspace + channel.
+		openTarget = channel
+		if cid, tid, _ := slack.ParseChannelURL(channel); cid != "" {
+			_, webLink = slack.ChannelLinks(cid, tid)
 		} else {
-			warn.Printf("  ⚠️  could not resolve %q: %v\n", channel, err)
+			webLink = channel
 		}
-		if info, err := client.AuthTest(ctx); err == nil {
-			teamID = info.TeamID
+	} else {
+		channelID := channel
+		teamID := ""
+		if token := config.Cfg.SlackToken; token != "" {
+			client := slack.NewClient(token)
+			if id, err := client.ResolveChannel(ctx, channel); err == nil {
+				channelID = id
+			} else {
+				warn.Printf("  ⚠️  could not resolve %q: %v\n", channel, err)
+			}
+			if info, err := client.AuthTest(ctx); err == nil {
+				teamID = info.TeamID
+			}
+		} else if !slack.IsChannelID(channelID) {
+			warn.Println("  ⚠️  No Slack token set and the channel is a name.")
+			warn.Println("     Tip: in Slack, open the channel ▸ click its name ▸ Copy link, then paste")
+			warn.Println("     that into slack_channel (or use a channel ID like C0123ABCD).")
+			warn.Println("     No token or workspace-admin rights are needed for this.")
 		}
-	} else if !slack.IsChannelID(channelID) {
-		warn.Println("  ⚠️  no Slack token set and channel is a name — set a token or use a channel ID (C…) for a reliable link.")
+		openTarget, webLink = slack.ChannelLinks(channelID, teamID)
 	}
 
 	// The brief must be on the clipboard so the user can paste it, even when
@@ -149,14 +170,13 @@ func maybePostToSlack(ctx context.Context, brief string) {
 		output.CopyToClipboard(brief)
 	}
 
-	deepLink, webLink := slack.ChannelLinks(channelID, teamID)
 	fmt.Println()
 	dim.Println("  Opening Slack — your brief is on the clipboard.")
 	fmt.Printf("  Channel: %s\n", channel)
 	fmt.Printf("  Link:    %s\n", webLink)
-	if err := slack.OpenURL(ctx, deepLink); err != nil {
+	if err := slack.OpenURL(ctx, openTarget); err != nil {
 		warn.Printf("  ⚠️  couldn't open Slack automatically: %v\n", err)
-		fmt.Printf("  Open this link manually: %s\n", deepLink)
+		fmt.Printf("  Open this link manually: %s\n", openTarget)
 	}
 	fmt.Println()
 	color.New(color.Bold).Println("  ➜ Paste (Cmd/Ctrl+V) into the channel, then press Enter to post as yourself.")

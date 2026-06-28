@@ -89,6 +89,39 @@ func TestMaybePostToSlackHandoff(t *testing.T) {
 	}
 }
 
+// TestMaybePostToSlackNoTokenChannelLink proves the non-admin path: an employee
+// pastes a channel link (Slack ▸ Copy link) with NO token, and the hand-off
+// works without making any Slack API call.
+func TestMaybePostToSlackNoTokenChannelLink(t *testing.T) {
+	// Any HTTP call would mean we wrongly required a token.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected Slack API call to %s — no token path must not hit the API", r.URL.Path)
+	}))
+	defer srv.Close()
+	t.Setenv("SLACK_API_BASE", srv.URL)
+
+	config.Cfg = config.Config{SlackChannel: "https://acme.slack.com/archives/C0ANNOUNCE"}
+	slackFlag = true
+	noSlackFlag = false
+	noClipboard = false
+	t.Cleanup(func() { slackFlag = false; config.Cfg = config.Config{} })
+
+	out := captureOutput(t, func() {
+		maybePostToSlack(context.Background(), "Today:\n• ship it")
+	})
+	t.Logf("rendered hand-off output (no token):\n%s", out)
+
+	for _, want := range []string{
+		"Opening Slack",
+		"https://slack.com/app_redirect?channel=C0ANNOUNCE", // CID parsed from the pasted link
+		"Paste",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("hand-off output missing %q.\n--- output ---\n%s", want, out)
+		}
+	}
+}
+
 // TestMaybePostToSlackDisabled confirms --no-slack suppresses the hand-off.
 func TestMaybePostToSlackDisabled(t *testing.T) {
 	config.Cfg = config.Config{SlackChannel: "#announcements"}
