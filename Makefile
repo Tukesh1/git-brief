@@ -19,25 +19,17 @@ all: build ## Default: build the binary
 
 build: ## Compile the binary into ./bin/git-brief
 	@mkdir -p $(BIN_DIR)
-	go build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(CMD_PKG)
-	@echo "Built $(BIN_DIR)/$(BINARY) (version=$(VERSION))"
+	@go build -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(CMD_PKG)
 
 ## ── Install ──────────────────────────────────────────────────────────────────
 
 install: build ## Install git-brief to $(INSTALL_DIR)
 	@mkdir -p $(INSTALL_DIR)
-	cp $(BIN_DIR)/$(BINARY) $(INSTALL_DIR)/$(BINARY)
-	@echo ""
-	@echo "✅  Installed $(INSTALL_DIR)/$(BINARY)"
-	@echo ""
-	@echo "Make sure $(INSTALL_DIR) is in your PATH:"
-	@echo "  export PATH=\"\$$PATH:$(INSTALL_DIR)\""
-	@echo ""
-	@echo "Then run:  git brief init"
+	@cp $(BIN_DIR)/$(BINARY) $(INSTALL_DIR)/$(BINARY)
+	@echo "✅ Installed. Next step: run 'git brief init'"
 
 uninstall: ## Remove git-brief from $(INSTALL_DIR)
-	rm -f $(INSTALL_DIR)/$(BINARY)
-	@echo "Removed $(INSTALL_DIR)/$(BINARY)"
+	@rm -f $(INSTALL_DIR)/$(BINARY)
 
 ## ── Code quality ─────────────────────────────────────────────────────────────
 
