@@ -74,6 +74,53 @@ func normalizeName(s string) string {
 	return strings.TrimPrefix(strings.TrimSpace(s), "#")
 }
 
+// ParseChannelURL extracts a channel ID (and team ID, when present) from a Slack
+// channel link or deep link that a user copied straight from the Slack app — for
+// example "https://acme.slack.com/archives/C0123ABCD" (channel ▸ Copy link),
+// "https://app.slack.com/client/T0AAAA/C0123ABCD", or
+// "slack://channel?team=T0AAAA&id=C0123ABCD".
+//
+// ok reports whether s looked like such a URL. This requires no token and no
+// admin rights — any workspace member can copy a channel link.
+func ParseChannelURL(s string) (channelID, teamID string, ok bool) {
+	s = strings.TrimSpace(s)
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme == "" {
+		return "", "", false
+	}
+
+	switch u.Scheme {
+	case "slack":
+		q := u.Query()
+		return q.Get("id"), q.Get("team"), true
+	case "http", "https":
+		if !strings.Contains(u.Host, "slack.com") {
+			return "", "", false
+		}
+		if c := u.Query().Get("channel"); c != "" {
+			channelID = c // app_redirect?channel=C0123ABCD
+		}
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		for i, p := range parts {
+			switch p {
+			case "archives":
+				if i+1 < len(parts) && IsChannelID(parts[i+1]) {
+					channelID = parts[i+1]
+				}
+			case "client":
+				if i+1 < len(parts) && strings.HasPrefix(parts[i+1], "T") {
+					teamID = parts[i+1]
+				}
+				if i+2 < len(parts) && IsChannelID(parts[i+2]) {
+					channelID = parts[i+2]
+				}
+			}
+		}
+		return channelID, teamID, true
+	}
+	return "", "", false
+}
+
 // ChannelLinks returns a native deep link (slack://) and a web fallback link
 // (https://slack.com/app_redirect) that both open the given channel in the
 // user's Slack client. The native link is only well-formed when teamID is
