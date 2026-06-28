@@ -18,6 +18,8 @@ The binary is named `git-brief` so that `git brief` works as a git sub-command.
 - Clipboard: `atotto/clipboard`
 - Terminal colour: `fatih/color`
 - Interactive prompts: `AlecAivazis/survey/v2`
+- Terminal detection: `golang.org/x/term` (TTY check before interactive prompts)
+- Slack hand-off: standard library `net/http` (no SDK)
 
 ---
 
@@ -38,6 +40,9 @@ git-brief/
 │   ├── collector/
 │   │   ├── git.go              # git log reader (os/exec)
 │   │   └── github.go           # GitHub PR fetcher (go-github)
+│   ├── slack/
+│   │   ├── slack.go            # Channel resolve + deep links + open client
+│   │   └── slack_test.go       # httptest tests (SLACK_API_BASE override)
 │   ├── ai/
 │   │   └── summarize.go        # Anthropic / Gemini / OpenAI adapters
 │   ├── prompt/
@@ -95,11 +100,38 @@ git brief --since "monday"        # Override time range
 git brief --days 3                # Last 3 working days
 git brief -w ~/projects           # Override workspace directory
 git brief --no-clipboard          # Print without copying to clipboard
+git brief --slack                 # Send to the configured Slack channel (no prompt)
+git brief --slack-open            # Open Slack to paste/send manually (no background post)
+git brief --no-slack              # Never touch Slack
 ```
 
 ---
 
 ## Design Constraints
+
+### Slack delivery (two modes, always as the user)
+- Posts are always made **as the user, never as a bot**, and always behind an
+  approval step. There are two delivery modes in `cmd/root.go`:
+  - **Background send** (`postBriefToSlack`): default when a `slack_token` is
+    set and `--slack-open` is not. Posts via `chat.postMessage` (needs a
+    `chat:write` user token), no window. Approval is a terminal confirm.
+  - **Open hand-off** (`openSlackHandoff`): no token, or `--slack-open`. Copies
+    the brief to the clipboard and opens the channel; the user pastes + sends.
+- If a background send fails (e.g. `missing_scope`), the code falls back to the
+  open hand-off automatically.
+- Slack has **no draft-into-channel API**: text can only be navigated to (deep
+  links, which cannot prefill the compose box — confirmed via Slack docs) or
+  sent (`chat.postMessage`). So "auto + background" necessarily means sending,
+  which is why background mode requires a write-capable token.
+- The no-token hand-off is first-class: a pasted channel link (`…/archives/C…`)
+  or bare channel ID is parsed locally by `slack.ParseChannelURL` (no API call),
+  so non-admins without a token can still use it.
+- `internal/slack` uses the token for `auth.test`, `conversations.list`
+  (resolve a `#name`), `chat.postMessage`, and `chat.getPermalink` only.
+- The Slack API base URL is overridable via the `SLACK_API_BASE` env var so the
+  integration is testable against an `httptest` mock server.
+- Interactive prompts only run on a real TTY (checked with `golang.org/x/term`);
+  use `--slack` to opt in non-interactively, `--no-slack` to disable.
 
 ### Context & Cancellation
 - Thread `context.Context` through all long-running work.

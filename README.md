@@ -115,7 +115,72 @@ git brief --since "monday"    # Custom time range
 git brief --days 3            # Last 3 days (returning from PTO)
 git brief -w ~/projects       # Override workspace directory
 git brief --no-clipboard      # Print only, skip clipboard
+git brief --slack             # Open the configured Slack channel to post (no prompt)
+git brief --no-slack          # Never open Slack, even if a channel is configured
 ```
+
+## Post to Slack
+
+`git brief` can deliver your standup to a Slack channel in one of two ways. In
+both, the message is posted **as you — never as a bot** — and never without your
+approval.
+
+| | Background send | Open hand-off |
+|---|---|---|
+| **What happens** | Posts the brief straight to the channel — no window, no pasting | Copies the brief to your clipboard and opens the channel so you paste + send |
+| **Needs a token?** | Yes — an `xoxp-` user token with `chat:write` | No token, no admin |
+| **Approval** | You confirm in the terminal, then it sends immediately | You press send inside Slack |
+| **Select with** | default when a token is set, or `--slack` | `--slack-open`, or automatically when no token is set |
+
+> Why isn't there an "auto-paste into the box but you still press send in the
+> background" mode? Slack has **no API to draft a message into a channel** —
+> text can only be *navigated to* (a deep link, which can't prefill) or *sent*
+> (the API). So "auto + background" means actually sending via the API, and that
+> needs a write-capable token.
+
+### Background send (auto, no window)
+
+Provide an `xoxp-` user token with the `chat:write` scope during
+`git brief init` (or edit `~/.config/git-brief/config.json`):
+
+```jsonc
+{
+  "slack_token": "xoxp-…",           // user token with chat:write — posts AS YOU, not a bot
+  "slack_channel": "#announcements"  // a #name, a channel ID, or a pasted channel link
+}
+```
+
+```sh
+git brief            # generate, confirm in the terminal, then it posts in the background
+git brief --slack    # send without the confirmation prompt
+git brief --no-slack # generate the brief but never touch Slack
+```
+
+Note: a user token requires installing a small Slack app, which some workspaces
+gate behind **admin approval** — that's the cost of letting any tool post for
+you. If you can't get one, use the no-token hand-off below.
+
+### Open hand-off (no token, works for everyone)
+
+In Slack, open the channel ▸ click its name ▸ **Copy link**, and paste that as
+your `slack_channel` (a bare channel ID like `C0123ABCD` works too):
+
+```jsonc
+{
+  "slack_channel": "https://acme.slack.com/archives/C0123ABCD"
+}
+```
+
+```sh
+git brief              # opens Slack with the brief on your clipboard; you paste + send
+git brief --slack-open # force this mode even when a token is configured
+```
+
+Any workspace member can copy a channel link — no token and no admin rights
+required. If Slack can't be opened automatically (e.g. on a headless box), the
+channel link is printed so you can open it yourself. If a background send fails
+(for example the token lacks `chat:write`), git-brief automatically falls back
+to this hand-off.
 
 ## Supported AI Providers
 

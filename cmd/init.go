@@ -103,21 +103,31 @@ func runInitWizard() error {
 	}
 
 	// ── Slack (optional) ───────────────────────────────────────
+	// git-brief never posts to Slack itself: it copies the brief to your
+	// clipboard and opens the channel so you paste and press send yourself.
+	// That means no bot, no write scope, and no workspace-admin rights needed.
 	var useSlack bool
 	_ = survey.AskOne(&survey.Confirm{
-		Message: "Enable Slack integration? (posts standup to a channel)",
-		Default: config.Cfg.SlackToken != "",
+		Message: "Enable Slack hand-off? (opens the channel so you can post the brief yourself)",
+		Default: config.Cfg.SlackChannel != "",
 	}, &useSlack)
 
 	if useSlack {
-		if err := askSecret("Slack Token (xoxp-... or xoxb-...):", &config.Cfg.SlackToken); err != nil {
-			return err
-		}
+		fmt.Println("  Tip: in Slack, open the channel ▸ click its name ▸ Copy link, and paste it below.")
 		if err := survey.AskOne(&survey.Input{
-			Message: "Slack Channel (e.g. #standups or C12345678):",
+			Message: "Slack channel (paste a channel link, or #name, or a channel ID like C0123ABCD):",
 			Default: config.Cfg.SlackChannel,
 		}, &config.Cfg.SlackChannel); err != nil {
 			return fmt.Errorf("setup cancelled")
+		}
+		// The token is OPTIONAL. With a chat:write user token (xoxp-…) git-brief
+		// can post the brief in the background as you (no window, no pasting).
+		// Without one it opens the channel so you paste and send manually — which
+		// needs no token and no workspace-admin rights.
+		fmt.Println("  Optional: an xoxp- user token with chat:write lets git-brief post in the background as you.")
+		fmt.Println("  Leave it blank to instead open Slack and paste/send manually (no token needed).")
+		if err := askSecret("Slack user token (optional; press Enter to skip):", &config.Cfg.SlackToken); err != nil {
+			return err
 		}
 	} else {
 		// Clear them if they disabled it
