@@ -102,6 +102,29 @@ func runInitWizard() error {
 		}
 	}
 
+	// ── Slack (optional) ───────────────────────────────────────
+	var useSlack bool
+	_ = survey.AskOne(&survey.Confirm{
+		Message: "Enable Slack integration? (posts standup to a channel)",
+		Default: config.Cfg.SlackToken != "",
+	}, &useSlack)
+
+	if useSlack {
+		if err := askSecret("Slack Token (xoxp-... or xoxb-...):", &config.Cfg.SlackToken); err != nil {
+			return err
+		}
+		if err := survey.AskOne(&survey.Input{
+			Message: "Slack Channel (e.g. #standups or C12345678):",
+			Default: config.Cfg.SlackChannel,
+		}, &config.Cfg.SlackChannel); err != nil {
+			return fmt.Errorf("setup cancelled")
+		}
+	} else {
+		// Clear them if they disabled it
+		config.Cfg.SlackToken = ""
+		config.Cfg.SlackChannel = ""
+	}
+
 	// ── Persist ────────────────────────────────────────────────
 	if err := config.SaveConfig(); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)

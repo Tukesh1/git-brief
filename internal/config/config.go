@@ -21,6 +21,8 @@ type Config struct {
 	AnthropicAPIKey string   `mapstructure:"anthropic_api_key" json:"anthropic_api_key"`
 	GeminiAPIKey    string   `mapstructure:"gemini_api_key"   json:"gemini_api_key"`
 	OpenAIAPIKey    string   `mapstructure:"openai_api_key"   json:"openai_api_key"`
+	SlackToken      string   `mapstructure:"slack_token"      json:"slack_token"`
+	SlackChannel    string   `mapstructure:"slack_channel"    json:"slack_channel"`
 }
 
 // Cfg is the global configuration instance, populated by InitConfig.
