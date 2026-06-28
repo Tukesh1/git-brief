@@ -8,6 +8,7 @@
 package slack
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -203,6 +204,70 @@ func (c *Client) ResolveChannel(ctx context.Context, channel string) (string, er
 		}
 	}
 	return "", fmt.Errorf("channel %q not found (is the token a member of it?)", channel)
+}
+
+// PostMessage posts text to a channel in the background via the Slack Web API
+// and returns the new message timestamp. The token must carry the chat:write
+// scope; a user token (xoxp-…) posts the message **as that user, never as a
+// bot**. No Slack window is opened.
+func (c *Client) PostMessage(ctx context.Context, channelID, text string) (string, error) {
+	payload, err := json.Marshal(map[string]any{
+		"channel":      channelID,
+		"text":         text,
+		"unfurl_links": false,
+		"unfurl_media": false,
+	})
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiBase()+"/chat.postMessage", bytes.NewReader(payload))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("slack request: %w", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("slack request: unexpected status %d", res.StatusCode)
+	}
+
+	var resp struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+		TS    string `json:"ts"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return "", err
+	}
+	if !resp.OK {
+		return "", fmt.Errorf("slack chat.postMessage: %s", errOrUnknown(resp.Error))
+	}
+	return resp.TS, nil
+}
+
+// GetPermalink returns a shareable URL for a posted message. It is best-effort:
+// callers should treat any error as "no link available".
+func (c *Client) GetPermalink(ctx context.Context, channelID, ts string) (string, error) {
+	var resp struct {
+		OK        bool   `json:"ok"`
+		Error     string `json:"error"`
+		Permalink string `json:"permalink"`
+	}
+	q := url.Values{}
+	q.Set("channel", channelID)
+	q.Set("message_ts", ts)
+	if err := c.get(ctx, "/chat.getPermalink", q, &resp); err != nil {
+		return "", err
+	}
+	if !resp.OK {
+		return "", fmt.Errorf("slack chat.getPermalink: %s", errOrUnknown(resp.Error))
+	}
+	return resp.Permalink, nil
 }
 
 // get performs an authenticated GET against the Slack Web API and decodes the
