@@ -140,3 +140,16 @@ git brief --no-clipboard          # Print without copying to clipboard
 - Run `make lint` before committing.
 - Run `go build ./...` to verify the build.
 - If adding a new dependency, document it in this file and in `go.mod`.
+
+---
+
+## Cursor Cloud specific instructions
+
+- Go `1.22.x` is pre-installed in the base image; the startup update script only runs `go mod download`. There are no system services, databases, or containers to start.
+- There are no automated tests (`*_test.go`) in this repo. "Testing" here means `make lint` (`gofmt -w .` + `go vet ./...`) and `make build` / `go build ./...`, matching CI in `.github/workflows/go.yml`.
+- Run the CLI locally without installing via `./bin/git-brief <cmd>` after `make build`. `version`, `--version`, `config`, and `--help` work with no configuration.
+- Config and secrets are NOT read from environment variables. The app reads only `~/.config/git-brief/config.json` (see `internal/config/config.go`). To use an LLM/GitHub key, either run the interactive `git brief init` wizard or write the JSON file directly (keys: `gemini_api_key`, `anthropic_api_key`, `openai_api_key`, `github_token`, plus `llm_provider`). Adding a shell env secret alone will not be picked up.
+- `git brief init` uses interactive `survey` prompts and will fail without a TTY; in a non-interactive cloud shell, write `config.json` directly instead of running the wizard.
+- A bare `git brief` (no API key configured) auto-launches the interactive wizard, which blocks/fails in a non-interactive shell. Pre-populate `config.json` first to avoid this.
+- The standup-brief flow (`git brief`) makes a live network call to the configured LLM provider (Gemini/Anthropic/OpenAI). Generating an actual brief requires a valid third-party API key; without one the git/GitHub collection still runs but the run ends with an `AI: ... API key not valid` error at the AI step.
+- The collector filters commits to the configured `author`/`email` (falling back to local `git config user.name/email`). When testing collection, set those to match the repo's commit authors or it will report "No commits ... found".
