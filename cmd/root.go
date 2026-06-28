@@ -24,6 +24,7 @@ var (
 	noClipboard   bool
 	slackFlag     bool
 	noSlackFlag   bool
+	slackOpenFlag bool
 	workspaceFlag []string
 )
 
@@ -90,11 +91,18 @@ Run 'git brief init' for first-time setup.`,
 	},
 }
 
-// maybePostToSlack performs the manual-approval Slack hand-off. It never posts
-// to Slack itself: it copies the brief to the clipboard and opens the target
-// channel in the user's Slack client, where they paste it and press send. The
-// message is therefore always posted as the user (never as a bot) and only
-// after they explicitly confirm twice — once here, and again in Slack.
+// maybePostToSlack delivers the brief to Slack after the user approves.
+//
+// Two modes:
+//   - Background send (default when a Slack token is configured): posts the
+//     brief straight to the channel via the Web API, as the user, with no Slack
+//     window opening and no manual paste. Requires a chat:write user token.
+//   - Open hand-off (no token, or --slack-open): copies the brief to the
+//     clipboard and opens the channel in Slack so the user pastes and sends.
+//
+// Either way git-brief never sends without approval: an interactive confirm
+// gates the action (skipped with --slack for scripting), and the open hand-off
+// always leaves the final send to the user inside Slack.
 func maybePostToSlack(ctx context.Context, brief string) {
 	if noSlackFlag {
 		return
@@ -108,32 +116,89 @@ func maybePostToSlack(ctx context.Context, brief string) {
 		return
 	}
 
-	// Manual approval gate #1: decide whether to open Slack at all.
-	//   --slack    → always open (non-interactive friendly)
-	//   --no-slack → handled above (never open)
-	//   otherwise  → prompt, but only when attached to a real terminal so we
-	//                never hang a scripted/CI run.
+	token := config.Cfg.SlackToken
+	// Background sending needs a write-capable token; otherwise we open Slack.
+	background := token != "" && !slackOpenFlag
+
+	// Approval gate. --slack opts in non-interactively; otherwise we proceed
+	// only after an interactive confirmation and never run unattended.
 	if !slackFlag {
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
 			return
 		}
-		open := false
-		prompt := &survey.Confirm{
-			Message: fmt.Sprintf("Open Slack %s to post this brief? (you press send yourself)", channel),
-			Default: true,
+		msg := fmt.Sprintf("Open Slack %s to post this brief? (you press send)", channel)
+		if background {
+			msg = fmt.Sprintf("Post this brief to Slack %s now, as you? (sent immediately)", channel)
 		}
-		if err := survey.AskOne(prompt, &open); err != nil || !open {
+		ok := false
+		if err := survey.AskOne(&survey.Confirm{Message: msg, Default: true}, &ok); err != nil || !ok {
 			return
 		}
 	}
 
-	// Decide what to open. The token is entirely optional and read-only — it is
-	// only used to turn a #name into a channel ID. Employees who are not
-	// workspace admins (and so cannot install an app to get a token) can simply
-	// paste a channel link (Slack ▸ channel ▸ Copy link) or a channel ID.
+	if background {
+		if postBriefToSlack(ctx, brief, channel, token) {
+			return
+		}
+		warn.Println("  ↪ falling back to opening Slack for a manual send…")
+	}
+	openSlackHandoff(ctx, brief, channel, token)
+}
+
+// postBriefToSlack posts the brief to the channel via the Slack Web API, as the
+// authenticated user, with no window opening. It returns false (so the caller
+// can fall back to the open hand-off) when the channel can't be resolved or the
+// API rejects the post — e.g. the token lacks the chat:write scope.
+func postBriefToSlack(ctx context.Context, brief, channel, token string) bool {
+	client := slack.NewClient(token)
+
+	channelID, ok := resolveChannelForPost(ctx, client, channel)
+	if !ok {
+		return false
+	}
+
+	ts, err := client.PostMessage(ctx, channelID, brief)
+	if err != nil {
+		warn.Printf("  ⚠️  couldn't post to Slack: %v\n", err)
+		return false
+	}
+
+	fmt.Println()
+	color.New(color.FgCyan).Printf("✅ Posted to Slack %s as you — no window needed.\n", channel)
+	if link, err := client.GetPermalink(ctx, channelID, ts); err == nil && link != "" {
+		dim.Printf("   %s\n", link)
+	}
+	return true
+}
+
+// resolveChannelForPost turns a channel link / ID / #name into a channel ID for
+// chat.postMessage.
+func resolveChannelForPost(ctx context.Context, client *slack.Client, channel string) (string, bool) {
+	if cid, _, isURL := slack.ParseChannelURL(channel); isURL {
+		if cid != "" {
+			return cid, true
+		}
+		warn.Printf("  ⚠️  couldn't read a channel ID from %q\n", channel)
+		return "", false
+	}
+	if slack.IsChannelID(channel) {
+		return channel, true
+	}
+	id, err := client.ResolveChannel(ctx, channel)
+	if err != nil {
+		warn.Printf("  ⚠️  could not resolve %q: %v\n", channel, err)
+		return "", false
+	}
+	return id, true
+}
+
+// openSlackHandoff copies the brief to the clipboard and opens the channel in
+// the user's Slack client so they paste and send manually. Needs no token: a
+// pasted channel link or ID works for anyone, no workspace-admin rights needed.
+func openSlackHandoff(ctx context.Context, brief, channel, token string) {
 	var openTarget, webLink string
 
-	if _, _, ok := slack.ParseChannelURL(channel); ok {
+	if _, _, isURL := slack.ParseChannelURL(channel); isURL {
 		// User pasted a Slack link copied from the app: open it as-is. It needs
 		// no token and already routes to the correct workspace + channel.
 		openTarget = channel
@@ -145,7 +210,7 @@ func maybePostToSlack(ctx context.Context, brief string) {
 	} else {
 		channelID := channel
 		teamID := ""
-		if token := config.Cfg.SlackToken; token != "" {
+		if token != "" {
 			client := slack.NewClient(token)
 			if id, err := client.ResolveChannel(ctx, channel); err == nil {
 				channelID = id
@@ -210,7 +275,8 @@ func init() {
 	rootCmd.Flags().StringVar(&sinceFlag, "since", "", `Override time range (e.g. "monday", "2 days ago")`)
 	rootCmd.Flags().IntVar(&daysFlag, "days", 0, "Look back N days instead of yesterday/last-Friday")
 	rootCmd.Flags().BoolVar(&noClipboard, "no-clipboard", false, "Print the brief but skip clipboard copy")
-	rootCmd.Flags().BoolVar(&slackFlag, "slack", false, "Open the configured Slack channel to post the brief (no prompt)")
-	rootCmd.Flags().BoolVar(&noSlackFlag, "no-slack", false, "Never open Slack, even if a channel is configured")
+	rootCmd.Flags().BoolVar(&slackFlag, "slack", false, "Send the brief to the configured Slack channel without prompting")
+	rootCmd.Flags().BoolVar(&noSlackFlag, "no-slack", false, "Never touch Slack, even if a channel is configured")
+	rootCmd.Flags().BoolVar(&slackOpenFlag, "slack-open", false, "Open Slack to paste/send manually instead of background posting")
 	rootCmd.Flags().StringSliceVarP(&workspaceFlag, "workspace", "w", []string{}, "Override workspace directories")
 }
