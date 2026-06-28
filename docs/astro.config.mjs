@@ -4,13 +4,13 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
-	site: 'https://tukesh.github.io',
+	site: 'https://tukesh1.github.io',
 	base: '/git-brief',
 	integrations: [
 		starlight({
 			title: 'git brief',
 			social: [
-				{ icon: 'github', label: 'GitHub', href: 'https://github.com/Tukesh1/git-brief' },
+				{ icon: 'github', label: 'GitHub', href: 'https://github.com/tukesh1/git-brief' },
 				{ icon: 'external', label: 'Portfolio', href: 'https://tukesh.in/' },
 			],
 
