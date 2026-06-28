@@ -115,7 +115,41 @@ git brief --since "monday"    # Custom time range
 git brief --days 3            # Last 3 days (returning from PTO)
 git brief -w ~/projects       # Override workspace directory
 git brief --no-clipboard      # Print only, skip clipboard
+git brief --slack             # Open the configured Slack channel to post (no prompt)
+git brief --no-slack          # Never open Slack, even if a channel is configured
 ```
+
+## Post to Slack (manual send)
+
+`git brief` can hand your standup straight to a Slack channel — but it **never
+posts on your behalf**. The brief is copied to your clipboard and your Slack
+client opens directly in the target channel, where *you* paste it and press
+send. The message is therefore always posted **as you (never as a bot)** and
+nothing leaves your machine until you hit Enter in Slack.
+
+Enable it during `git brief init` (or edit `~/.config/git-brief/config.json`):
+
+```jsonc
+{
+  "slack_token": "xoxp-…",      // a *user* token, used only to look up the channel/team
+  "slack_channel": "#announcements" // a #name, or a channel ID like C0123ABCD
+}
+```
+
+Then:
+
+```sh
+git brief            # if a channel is configured, asks before opening Slack
+git brief --slack    # skip the prompt and open Slack straight away
+git brief --no-slack # generate the brief but never touch Slack
+```
+
+Notes:
+- The `slack_token` is optional but recommended — it resolves a `#name` to the
+  right channel and finds your workspace so the **desktop app** opens directly.
+  Without a token, configure `slack_channel` as a channel **ID** (`C…`).
+- If Slack can't be opened automatically (e.g. on a headless box), the channel
+  link is printed so you can open it yourself.
 
 ## Supported AI Providers
 

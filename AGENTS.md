@@ -18,6 +18,8 @@ The binary is named `git-brief` so that `git brief` works as a git sub-command.
 - Clipboard: `atotto/clipboard`
 - Terminal colour: `fatih/color`
 - Interactive prompts: `AlecAivazis/survey/v2`
+- Terminal detection: `golang.org/x/term` (TTY check before interactive prompts)
+- Slack hand-off: standard library `net/http` (no SDK)
 
 ---
 
@@ -38,6 +40,9 @@ git-brief/
 │   ├── collector/
 │   │   ├── git.go              # git log reader (os/exec)
 │   │   └── github.go           # GitHub PR fetcher (go-github)
+│   ├── slack/
+│   │   ├── slack.go            # Channel resolve + deep links + open client
+│   │   └── slack_test.go       # httptest tests (SLACK_API_BASE override)
 │   ├── ai/
 │   │   └── summarize.go        # Anthropic / Gemini / OpenAI adapters
 │   ├── prompt/
@@ -95,11 +100,28 @@ git brief --since "monday"        # Override time range
 git brief --days 3                # Last 3 working days
 git brief -w ~/projects           # Override workspace directory
 git brief --no-clipboard          # Print without copying to clipboard
+git brief --slack                 # Open configured Slack channel to post (no prompt)
+git brief --no-slack              # Never open Slack
 ```
 
 ---
 
 ## Design Constraints
+
+### Slack hand-off (manual send)
+- `git-brief` MUST NOT post to Slack itself. The flow is: copy the brief to the
+  clipboard → open the user's Slack client in the target channel → the user
+  pastes and presses send. This keeps messages posted **as the user, never as a
+  bot**, and gated behind explicit manual approval.
+- `internal/slack` uses the user token (`xoxp-…`) only for lookups
+  (`auth.test` for the team ID, `conversations.list` to resolve a `#name` to an
+  ID). It never calls `chat.postMessage`.
+- Slack deep links cannot prefill the compose box (confirmed via Slack docs);
+  the clipboard is the transport, the deep link only navigates.
+- The Slack API base URL is overridable via the `SLACK_API_BASE` env var so the
+  integration is testable against an `httptest` mock server.
+- The interactive "open Slack?" prompt only runs on a real TTY (checked with
+  `golang.org/x/term`); use `--slack` to opt in non-interactively.
 
 ### Context & Cancellation
 - Thread `context.Context` through all long-running work.
