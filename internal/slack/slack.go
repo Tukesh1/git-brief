@@ -1,8 +1,9 @@
 // Package slack implements a "manual approval" hand-off to Slack.
+//
 // git-brief never posts to Slack on the user's behalf. Instead it resolves the
 // target channel, copies the brief to the clipboard, and opens the Slack client
 // directly in that channel. The user pastes the brief and presses send
-// themselves so the message is always posted as the user not bot
+// themselves — so the message is always posted *as the user* (never as a bot)
 // and only ever after explicit manual confirmation inside Slack.
 package slack
 
@@ -36,6 +37,10 @@ func apiBase() string {
 	}
 	return defaultAPIBase
 }
+
+// Client is a minimal Slack Web API client. It uses a user token (xoxp-…) only
+// to look things up (resolve a channel name to an ID, discover the team ID); it
+// never posts messages.
 type Client struct {
 	token string
 	http  *http.Client
@@ -67,6 +72,53 @@ func IsChannelID(s string) bool {
 // name so "#standups" and "standups" compare equal.
 func normalizeName(s string) string {
 	return strings.TrimPrefix(strings.TrimSpace(s), "#")
+}
+
+// ParseChannelURL extracts a channel ID (and team ID, when present) from a Slack
+// channel link or deep link that a user copied straight from the Slack app — for
+// example "https://acme.slack.com/archives/C0123ABCD" (channel ▸ Copy link),
+// "https://app.slack.com/client/T0AAAA/C0123ABCD", or
+// "slack://channel?team=T0AAAA&id=C0123ABCD".
+//
+// ok reports whether s looked like such a URL. This requires no token and no
+// admin rights — any workspace member can copy a channel link.
+func ParseChannelURL(s string) (channelID, teamID string, ok bool) {
+	s = strings.TrimSpace(s)
+	u, err := url.Parse(s)
+	if err != nil || u.Scheme == "" {
+		return "", "", false
+	}
+
+	switch u.Scheme {
+	case "slack":
+		q := u.Query()
+		return q.Get("id"), q.Get("team"), true
+	case "http", "https":
+		if !strings.Contains(u.Host, "slack.com") {
+			return "", "", false
+		}
+		if c := u.Query().Get("channel"); c != "" {
+			channelID = c // app_redirect?channel=C0123ABCD
+		}
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		for i, p := range parts {
+			switch p {
+			case "archives":
+				if i+1 < len(parts) && IsChannelID(parts[i+1]) {
+					channelID = parts[i+1]
+				}
+			case "client":
+				if i+1 < len(parts) && strings.HasPrefix(parts[i+1], "T") {
+					teamID = parts[i+1]
+				}
+				if i+2 < len(parts) && IsChannelID(parts[i+2]) {
+					channelID = parts[i+2]
+				}
+			}
+		}
+		return channelID, teamID, true
+	}
+	return "", "", false
 }
 
 // ChannelLinks returns a native deep link (slack://) and a web fallback link
@@ -103,7 +155,7 @@ func (c *Client) AuthTest(ctx context.Context) (*AuthInfo, error) {
 }
 
 // ResolveChannel returns the conversation ID for the given channel. If channel
-// is already an ID it is returned unchanged, otherwise conversations.list is
+// is already an ID it is returned unchanged; otherwise conversations.list is
 // paged through to find a public or private channel whose name matches.
 func (c *Client) ResolveChannel(ctx context.Context, channel string) (string, error) {
 	if IsChannelID(channel) {
@@ -153,6 +205,8 @@ func (c *Client) ResolveChannel(ctx context.Context, channel string) (string, er
 	return "", fmt.Errorf("channel %q not found (is the token a member of it?)", channel)
 }
 
+// get performs an authenticated GET against the Slack Web API and decodes the
+// JSON response into out.
 func (c *Client) get(ctx context.Context, path string, query url.Values, out any) error {
 	u := apiBase() + path
 	if len(query) > 0 {

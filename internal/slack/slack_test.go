@@ -46,6 +46,38 @@ func TestChannelLinks(t *testing.T) {
 	}
 }
 
+func TestParseChannelURL(t *testing.T) {
+	cases := []struct {
+		in       string
+		wantID   string
+		wantTeam string
+		wantOK   bool
+	}{
+		// "Copy link" on a channel — the non-admin, no-token path.
+		{"https://acme.slack.com/archives/C0123ABCD", "C0123ABCD", "", true},
+		{"https://acme.slack.com/archives/C0123ABCD/p1700000000000100", "C0123ABCD", "", true},
+		// In-app client URL carries both team and channel IDs.
+		{"https://app.slack.com/client/T0AAAA11/C0123ABCD", "C0123ABCD", "T0AAAA11", true},
+		// Native deep link.
+		{"slack://channel?team=T0AAAA11&id=C0123ABCD", "C0123ABCD", "T0AAAA11", true},
+		// app_redirect web link.
+		{"https://slack.com/app_redirect?channel=C0123ABCD", "C0123ABCD", "", true},
+		// Not URLs — handled by the name/ID path instead.
+		{"#standups", "", "", false},
+		{"standups", "", "", false},
+		{"C0123ABCD", "", "", false},
+		// A non-Slack URL must not be treated as a channel link.
+		{"https://example.com/archives/C0123ABCD", "", "", false},
+	}
+	for _, c := range cases {
+		id, team, ok := ParseChannelURL(c.in)
+		if ok != c.wantOK || id != c.wantID || team != c.wantTeam {
+			t.Errorf("ParseChannelURL(%q) = (%q,%q,%v), want (%q,%q,%v)",
+				c.in, id, team, ok, c.wantID, c.wantTeam, c.wantOK)
+		}
+	}
+}
+
 // mockSlack spins up an httptest server that mimics the two Slack endpoints we
 // call, and points the package at it via SLACK_API_BASE.
 func mockSlack(t *testing.T, handler http.HandlerFunc) *httptest.Server {
@@ -154,7 +186,7 @@ func TestAuthTest(t *testing.T) {
 }
 
 // TestEndToEndHandoff exercises the full resolution path the CLI uses: resolve a
-// #name to an ID, look up the team ID, and build the links the user is sent to 
+// #name to an ID, look up the team ID, and build the links the user is sent to —
 // all against the mock Slack server, with OpenURL stubbed.
 func TestEndToEndHandoff(t *testing.T) {
 	mockSlack(t, func(w http.ResponseWriter, r *http.Request) {
