@@ -185,6 +185,70 @@ func TestAuthTest(t *testing.T) {
 	}
 }
 
+func TestPostMessage(t *testing.T) {
+	mockSlack(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat.postMessage" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer xoxp-test" {
+			t.Errorf("auth header = %q", got)
+		}
+		var body struct {
+			Channel string `json:"channel"`
+			Text    string `json:"text"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Channel != "C0123ABCD" || body.Text != "hello team" {
+			t.Errorf("unexpected payload: %+v", body)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "ts": "1700000000.000100"})
+	})
+
+	ts, err := NewClient("xoxp-test").PostMessage(context.Background(), "C0123ABCD", "hello team")
+	if err != nil {
+		t.Fatalf("PostMessage: %v", err)
+	}
+	if ts != "1700000000.000100" {
+		t.Errorf("ts = %q", ts)
+	}
+}
+
+func TestPostMessageError(t *testing.T) {
+	mockSlack(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "missing_scope"})
+	})
+	if _, err := NewClient("xoxp-test").PostMessage(context.Background(), "C0123ABCD", "x"); err == nil {
+		t.Fatal("expected error for ok:false, got nil")
+	}
+}
+
+func TestGetPermalink(t *testing.T) {
+	mockSlack(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat.getPermalink" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		q := r.URL.Query()
+		if q.Get("channel") != "C0123ABCD" || q.Get("message_ts") != "1700000000.000100" {
+			t.Errorf("unexpected query: %v", q)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":        true,
+			"permalink": "https://acme.slack.com/archives/C0123ABCD/p1700000000000100",
+		})
+	})
+
+	link, err := NewClient("xoxp-test").GetPermalink(context.Background(), "C0123ABCD", "1700000000.000100")
+	if err != nil {
+		t.Fatalf("GetPermalink: %v", err)
+	}
+	if link != "https://acme.slack.com/archives/C0123ABCD/p1700000000000100" {
+		t.Errorf("link = %q", link)
+	}
+}
+
 // TestEndToEndHandoff exercises the full resolution path the CLI uses: resolve a
 // #name to an ID, look up the team ID, and build the links the user is sent to —
 // all against the mock Slack server, with OpenURL stubbed.
