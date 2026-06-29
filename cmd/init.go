@@ -120,10 +120,13 @@ func runInitWizard() error {
 		}, &config.Cfg.SlackChannel); err != nil {
 			return fmt.Errorf("setup cancelled")
 		}
-		// The token is OPTIONAL and read-only — only needed to resolve a #name
-		// to a channel ID. Getting one may require admin app-approval, so it can
-		// safely be skipped when a channel link or ID was provided above.
-		if err := askSecret("Slack user token (optional; press Enter to skip — only needed to resolve a #name):", &config.Cfg.SlackToken); err != nil {
+		// The token is OPTIONAL. With a chat:write user token (xoxp-…) git-brief
+		// can post the brief in the background as you (no window, no pasting).
+		// Without one it opens the channel so you paste and send manually — which
+		// needs no token and no workspace-admin rights.
+		fmt.Println("  Optional: an xoxp- user token with chat:write lets git-brief post in the background as you.")
+		fmt.Println("  Leave it blank to instead open Slack and paste/send manually (no token needed).")
+		if err := askSecret("Slack user token (optional; press Enter to skip):", &config.Cfg.SlackToken); err != nil {
 			return err
 		}
 	} else {
