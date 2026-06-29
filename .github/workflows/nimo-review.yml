@@ -23,8 +23,8 @@ jobs:
           # Set the provider to OpenRouter
           ai_provider: 'openrouter'
           
-          # Choose any model from OpenRouter (e.g., meta-llama/llama-3-70b-instruct)
-          ai_model: ${{ vars.AI_MODEL }}
+          # Pulls the model name from your GitHub Repository Secrets!
+          ai_model: ${{ secrets.AI_MODEL }}
           
           # Pulls your secure OpenRouter API key from your GitHub Repository Secrets
           openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
