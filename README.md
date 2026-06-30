@@ -1,4 +1,4 @@
-<h1 align="center"><code>git brief</code></h1>
+<h1 align="center"><code>git-brief</code></h1>
 <p align="center">
   <img
     alt="Platform"
@@ -11,14 +11,12 @@
   /></a>
 </p>
 
-<h3 align="center">Stop writing standup. You already logged the work..</h3>
+<p align="center">A CLI tool that writes your daily standup for you using your local Git history and GitHub activity.</p>
 
-<br />
-
-```
+```text
 $ git brief
 
-📋 brief — Thursday, June 26
+📋 brief - Thursday, June 26
 
 Yesterday:
   • Fixed auth token expiry bug in /api/refresh (PR #234 merged)
@@ -35,121 +33,108 @@ Blockers:
 📋 Copied to clipboard. Paste into Slack.
 ```
 
-One command. Three seconds. Your standup is written and copied to clipboard.
-
 ## How it works
 
-```
-  git brief runs
-       │
-       ├── scans your git commits from the last 24hrs
-       │   across all your local repositories
-       │
-       ├── fetches PRs you merged or reviewed on GitHub
-       │
-       └── sends one prompt to your configured AI provider
-                │
-                └── AI writes Yesterday / Today / Blockers
-                         │
-                         └── output printed + copied to clipboard
-```
+1. It scans your local git commits (defaulting to yesterday, and automatically skipping weekends).
+2. It fetches PRs you merged or reviewed via the GitHub API.
+3. It bundles that data into a strict prompt and sends it to your LLM provider.
+4. It outputs your standup to the terminal and copies it to your clipboard.
 
-One AI call per run. No chat, no back-and-forth, no wasted tokens.
+It makes exactly one API call per run. No chat interfaces, no wasted tokens.
 
-### ✨ What it catches that others miss:
-- **Uncommitted work:** Captures modified files from your IDE using `git status`.
-- **Git Stashes:** Finds recent work you had to `git stash` and switch away from.
-- **Pair Programming:** Parses `Co-authored-by:` tags so you get credit when pairing.
-- **Rebase-aware:** Uses `Commit Date` instead of just Author Date so rebased commits aren't lost.
-- **GitHub Issues & Draft PRs:** Finds Open/Draft PRs you're working on and issues you've commented on, not just merged PRs.
+## Features that catch edge cases
 
-## Install
+Traditional `git log` tools usually miss half of what you actually do in a day. `git-brief` is built to catch the edge cases:
 
-### Go install (recommended)
+* **Uncommitted work:** It runs `git status` to include files you are actively modifying.
+* **Git stashes:** It checks your recent stashes for work you had to pause.
+* **Pair programming:** It parses `Co-authored-by:` tags in commit messages so you get credit when pairing.
+* **Rebase-aware:** It strictly looks at the commit date (`%cI`), meaning rebased commits aren't lost if the author date is old.
+* **Draft PRs & Issues:** It tracks open PRs and issues you've commented on, not just what was merged.
 
+## Installation
+
+**Using Go (Recommended)**
 ```sh
 go install github.com/tukesh1/git-brief@latest
 ```
 
-### Build from source
-
+**Build from source**
 ```sh
 git clone https://github.com/tukesh1/git-brief.git
 cd git-brief
 make install
 ```
+*Note: The binary installs to `~/.local/bin/git-brief`. Make sure that folder is in your `$PATH`.*
 
-The binary is installed to `~/.local/bin/git-brief`. Make sure `~/.local/bin` is in your PATH.
+## Quick start
 
-## Quick Start
-
+Run the setup wizard to configure your workspaces and API keys:
 ```sh
-# One-time setup (takes 60 seconds)
-$ git brief init
-
-  Welcome to git-brief setup!
-
-  ? LLM provider: Google 
-  ? Gemini API Key: ********
-  ? Enable GitHub PR integration? Yes
-  ? GitHub Personal Access Token: ********
-  ? GitHub username: tukesh1
-
-  ✅ Setup complete!
-
-# Generate your standup every morning
-$ git brief
+git brief init
 ```
 
-## Usage
+Then generate your standup:
+```sh
+git brief
+```
+
+## Advanced Usage
 
 ```sh
 git brief                     # Generate today's standup
 git brief init                # Run the setup wizard
-git brief config              # Show config path + masked contents
-git brief version             # Print version
-git brief --version           # Same
+git brief config              # Show your config (keys masked)
+git brief version             # Print the installed version
 
-# Overrides
+# Useful Overrides
 git brief --since "monday"    # Custom time range
-git brief --days 3            # Last 3 days (returning from PTO)
-git brief -w ~/projects       # Override workspace directory
-git brief --no-clipboard      # Print only, skip clipboard
+git brief --days 3            # Look back 3 days
+git brief -w ~/projects       # Scan a specific directory instead of config defaults
+git brief --no-clipboard      # Print only, skip clipboard copy
 ```
 
-## Supported AI Providers
+## Slack Integration
+
+If you want `git-brief` to post directly to Slack instead of copying to your clipboard, you have two options:
+
+### 1. Background Send (API Token)
+Set a Slack user token (`xoxp-...`) and a channel in your config (`git brief init`). It will post the standup as you.
+```sh
+git brief            # Prompts you to confirm, then posts
+git brief --slack    # Posts immediately without confirmation
+git brief --no-slack # Skips Slack entirely
+```
+
+### 2. Open Hand-off (Browser)
+If you don't want to use an API token, you can just set a channel link in your config.
+```sh
+git brief --slack-open
+```
+This copies the brief to your clipboard and automatically opens the Slack app to your specified channel so you can hit paste.
+
+## Supported AI providers
+
+Because `git-brief` only sends commit metadata (and never your source code), context windows are extremely small and cheap.
 
 | Provider | Model | Cost per standup |
 |---|---|---|
-| **Google Gemini** | gemini-2.5-flash | Free tier available |
-| **Anthropic** | claude-3.5-haiku | ~$0.001 |
-| **OpenAI** | gpt-4o-mini | ~$0.001 |
+| Google Gemini | `gemini-2.5-flash` | Free tier available |
+| Anthropic | `claude-3.5-haiku` | ~$0.001 |
+| OpenAI | `gpt-4o-mini` | ~$0.001 |
 
-You bring your own API key. No subscription, no backend, no server costs.
-
-## Configuration
-
-Config is stored at `~/.config/git-brief/config.json`.
-
-```sh
-# View your current config (API keys are masked)
-$ git brief config
-
-# Re-run the setup wizard
-$ git brief init
-```
+You bring your own API key. There is no subscription and no backend.
 
 ## Development
 
 ```sh
-make build     # Build bin/git-brief with version info
-make install   # Build + install to ~/.local/bin
-make lint      # Format + vet
-make fmt       # gofmt -w .
+make build     # Compile the binary
+make install   # Compile and copy to ~/.local/bin
+make lint      # Format and vet the code
 make clean     # Remove build artifacts
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
