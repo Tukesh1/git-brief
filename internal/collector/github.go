@@ -9,9 +9,9 @@ import (
 	"github.com/tukesh1/git-brief/internal/config"
 )
 
-// PRData holds information about a single GitHub pull request.
+// PRData holds information about a single GitHub pull request or issue.
 type PRData struct {
-	Type     string // "merged" or "reviewed"
+	Type     string // "merged", "reviewed", "draft", or "issue"
 	Title    string
 	Number   int
 	RepoName string // "owner/repo" format
@@ -27,24 +27,36 @@ type GithubResult struct {
 func CollectGithubData(ctx context.Context, since string, days int) GithubResult {
 	var result GithubResult
 
-	if config.Cfg.GithubToken == "" {
-		result.Warnings = append(result.Warnings, Warning("no GitHub token configured — skipping PR data"))
+	// GitHub is optional — skip quietly when not configured.
+	if config.Cfg.GithubToken == "" || config.Cfg.GithubUsername == "" {
 		return result
 	}
 
 	githubUser := config.Cfg.GithubUsername
-	if githubUser == "" {
-		result.Warnings = append(result.Warnings, Warning("no GitHub username configured — skipping PR data"))
-		return result
-	}
 
 	sinceTime := config.SinceTime(days)
 	dateStr := sinceTime.Format("2006-01-02")
 
 	client := github.NewClient(nil).WithAuthToken(config.Cfg.GithubToken)
 
-	// Track PR numbers we've seen to deduplicate.
-	seen := make(map[int]bool)
+	// Deduplicate by owner/repo#number so the same PR number in different
+	// repositories is not collapsed incorrectly.
+	seen := make(map[string]bool)
+
+	appendIssue := func(issue *github.Issue, typ string) {
+		repo := repoNameFromURL(issue.GetRepositoryURL())
+		key := fmt.Sprintf("%s#%d", repo, issue.GetNumber())
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		result.PRs = append(result.PRs, PRData{
+			Type:     typ,
+			Title:    issue.GetTitle(),
+			Number:   issue.GetNumber(),
+			RepoName: repo,
+		})
+	}
 
 	// Merged PRs.
 	mergedQuery := fmt.Sprintf("author:%s type:pr merged:>%s", githubUser, dateStr)
@@ -53,14 +65,7 @@ func CollectGithubData(ctx context.Context, since string, days int) GithubResult
 	})
 	if err == nil && mergedResult != nil {
 		for _, issue := range mergedResult.Issues {
-			n := issue.GetNumber()
-			seen[n] = true
-			result.PRs = append(result.PRs, PRData{
-				Type:     "merged",
-				Title:    issue.GetTitle(),
-				Number:   n,
-				RepoName: repoNameFromURL(issue.GetRepositoryURL()),
-			})
+			appendIssue(issue, "merged")
 		}
 	} else if err != nil {
 		result.Warnings = append(result.Warnings, Warning(fmt.Sprintf("GitHub merged-PR query failed: %v", err)))
@@ -73,18 +78,9 @@ func CollectGithubData(ctx context.Context, since string, days int) GithubResult
 	})
 	if err == nil && reviewedResult != nil {
 		for _, issue := range reviewedResult.Issues {
-			n := issue.GetNumber()
-			if seen[n] {
-				continue
-			}
-			seen[n] = true
-			result.PRs = append(result.PRs, PRData{
-				Type:     "reviewed",
-				Title:    issue.GetTitle(),
-				Number:   n,
-				RepoName: repoNameFromURL(issue.GetRepositoryURL()),
-			})
+			appendIssue(issue, "reviewed")
 		}
+	} else if err != nil {
 		result.Warnings = append(result.Warnings, Warning(fmt.Sprintf("GitHub reviewed-PR query failed: %v", err)))
 	}
 
@@ -95,17 +91,7 @@ func CollectGithubData(ctx context.Context, since string, days int) GithubResult
 	})
 	if err == nil && draftResult != nil {
 		for _, issue := range draftResult.Issues {
-			n := issue.GetNumber()
-			if seen[n] {
-				continue
-			}
-			seen[n] = true
-			result.PRs = append(result.PRs, PRData{
-				Type:     "draft",
-				Title:    issue.GetTitle(),
-				Number:   n,
-				RepoName: repoNameFromURL(issue.GetRepositoryURL()),
-			})
+			appendIssue(issue, "draft")
 		}
 	} else if err != nil {
 		result.Warnings = append(result.Warnings, Warning(fmt.Sprintf("GitHub draft-PR query failed: %v", err)))
@@ -118,17 +104,7 @@ func CollectGithubData(ctx context.Context, since string, days int) GithubResult
 	})
 	if err == nil && issueResult != nil {
 		for _, issue := range issueResult.Issues {
-			n := issue.GetNumber()
-			if seen[n] {
-				continue
-			}
-			seen[n] = true
-			result.PRs = append(result.PRs, PRData{
-				Type:     "issue",
-				Title:    issue.GetTitle(),
-				Number:   n,
-				RepoName: repoNameFromURL(issue.GetRepositoryURL()),
-			})
+			appendIssue(issue, "issue")
 		}
 	} else if err != nil {
 		result.Warnings = append(result.Warnings, Warning(fmt.Sprintf("GitHub issue query failed: %v", err)))

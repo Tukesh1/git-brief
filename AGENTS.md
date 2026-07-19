@@ -12,12 +12,14 @@ The binary is named `git-brief` so that `git brief` works as a git sub-command.
 - Go version: `1.22.2` (from `go.mod`)
 - Build tooling: standard Go toolchain + `Makefile`
 - CLI framework: `spf13/cobra`
-- Config storage: `spf13/viper` → `~/.config/git-brief/config.json`
+- Config storage: `spf13/viper` → `~/.config/git-brief/config.json` (mode `0600`)
 - GitHub API: `google/go-github/v62`
 - AI providers: `liushuangls/go-anthropic/v2`, `google/generative-ai-go`, `sashabaranov/go-openai`
+- Slack: stdlib `net/http` client in `internal/slack` (user token optional)
 - Clipboard: `atotto/clipboard`
 - Terminal colour: `fatih/color`
 - Interactive prompts: `AlecAivazis/survey/v2`
+- TTY detection: `golang.org/x/term`
 
 ---
 
@@ -27,7 +29,7 @@ The binary is named `git-brief` so that `git brief` works as a git sub-command.
 git-brief/
 ├── main.go                     # Entry point — calls cmd.Execute()
 ├── cmd/
-│   ├── root.go                 # Root cobra command (git brief)
+│   ├── root.go                 # Root cobra command (git brief) + Slack delivery
 │   ├── init.go                 # init sub-command + runInitWizard()
 │   ├── config.go               # config sub-command (show/masked config)
 │   └── version.go              # version sub-command + --version flag
@@ -40,6 +42,9 @@ git-brief/
 │   │   └── github.go           # GitHub PR fetcher (go-github)
 │   ├── ai/
 │   │   └── summarize.go        # Anthropic / Gemini / OpenAI adapters
+│   ├── slack/
+│   │   ├── slack.go            # Slack Web API + channel open hand-off
+│   │   └── slack_test.go       # httptest-backed unit tests
 │   ├── prompt/
 │   │   ├── system_prompt.txt   # Embedded plain-text AI instructions
 │   │   └── prompt.go           # go:embed exposure
@@ -65,7 +70,7 @@ make install
 # Uninstall
 make uninstall
 
-# Format + vet
+# Format + vet + test
 make lint
 
 # Plain format
@@ -73,6 +78,9 @@ make fmt                           # gofmt -w .
 
 # Vet only
 make vet                           # go vet ./...
+
+# Unit tests
+make test                          # go test ./...
 
 # Clean build output
 make clean
@@ -95,6 +103,9 @@ git brief --since "monday"        # Override time range
 git brief --days 3                # Last 3 working days
 git brief -w ~/projects           # Override workspace directory
 git brief --no-clipboard          # Print without copying to clipboard
+git brief --slack                 # Slack delivery without interactive confirm
+git brief --no-slack              # Skip Slack even if configured
+git brief --slack-open            # Force open/paste hand-off (no API post)
 ```
 
 ---
@@ -105,7 +116,7 @@ git brief --no-clipboard          # Print without copying to clipboard
 - Thread `context.Context` through all long-running work.
 - Use `exec.CommandContext` for all subprocess calls (git, etc.) so they are
   cancelled when the parent context expires.
-- AI calls use a 60-second timeout context.
+- AI calls use a 60-second timeout derived from the parent context.
 - The root command uses a 2-minute top-level timeout.
 
 ### Layer Boundaries
@@ -113,6 +124,7 @@ git brief --no-clipboard          # Print without copying to clipboard
   Warnings are returned as `collector.Warning` values or printed via `fmt`.
 - `internal/ai` imports `internal/collector` for its data types — this is
   intentional and acceptable.
+- `internal/slack` must not import `internal/output` or `fatih/color`.
 - `internal/config` has no dependencies on other internal packages.
 
 ### Date Logic
@@ -126,7 +138,23 @@ git brief --no-clipboard          # Print without copying to clipboard
 ### Config
 - Config file lives at `~/.config/git-brief/config.json`.
 - `config.ConfigPath()` is the single source of truth for this path.
+- `SaveConfig` writes the file with mode `0600`.
 - API keys are never printed in plain text; use `maskKey()` in cmd/config.go.
+
+### Slack (primary delivery target)
+- Briefs are written as Slack standups (Yesterday / Today / Blockers).
+- Clipboard and API post use `output.ForSlack` (section headers as `*Yesterday:*`).
+- Channel can be a pasted Slack link, channel ID, or `#name`.
+- With an `xoxp-` user token + `chat:write`, background post via
+  `chat.postMessage` (as the user). Without a token, open the channel for
+  manual paste/send.
+- Interactive confirm on TTY unless `--slack`; skipped entirely on non-TTY
+  unless `--slack`. `--no-slack` disables delivery.
+
+### Standup quality
+- Commits are sorted newest-first, noise-filtered, date-bucketed before the LLM.
+- Local uncommitted/stash is first-class Today signal; compressed when commit-rich.
+- Temperature 0 on all providers for stable output.
 
 ### Error Handling
 - Prefer `RunE` (returns `error`) over `Run` in cobra commands.

@@ -129,5 +129,10 @@ func SaveConfig() error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	// 0600 so API tokens are not world-readable. Chmod after write so an
+	// existing file previously created with a looser mode is tightened.
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }

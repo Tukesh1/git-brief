@@ -109,17 +109,17 @@ func findGitRepos(ctx context.Context, baseDirs []string) ([]string, []Warning) 
 
 // getGitIdent resolves the git author identity (name, email) to filter commits.
 // Priority: config.Cfg.Author/Email → git config user.name/email.
-func getGitIdent() (string, string) {
+func getGitIdent(ctx context.Context) (string, string) {
 	name := config.Cfg.Author
 	email := config.Cfg.Email
 
 	if name == "" {
-		if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
+		if out, err := exec.CommandContext(ctx, "git", "config", "user.name").Output(); err == nil {
 			name = strings.TrimSpace(string(out))
 		}
 	}
 	if email == "" {
-		if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
+		if out, err := exec.CommandContext(ctx, "git", "config", "user.email").Output(); err == nil {
 			email = strings.TrimSpace(string(out))
 		}
 	}
@@ -147,7 +147,7 @@ type CollectResult struct {
 func CollectGitData(ctx context.Context, since string, days int, workspaces []string) CollectResult {
 	var result CollectResult
 
-	authorNameCfg, authorEmailCfg := getGitIdent()
+	authorNameCfg, authorEmailCfg := getGitIdent(ctx)
 	if authorNameCfg == "" && authorEmailCfg == "" {
 		result.Warnings = append(result.Warnings, Warning("could not determine git author name/email — commits may not be filtered correctly"))
 	}

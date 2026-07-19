@@ -11,7 +11,7 @@ LDFLAGS   := -s -w -X $(MODULE)/cmd.Version=$(VERSION)
 
 BIN_DIR   := ./bin
 
-.PHONY: all build install uninstall fmt vet clean help
+.PHONY: all build install uninstall fmt vet test lint clean help
 
 all: build ## Default: build the binary
 
@@ -47,7 +47,10 @@ fmt: ## Format all Go source files
 vet: ## Run go vet
 	go vet ./...
 
-lint: fmt vet ## Run formatter + vet
+test: ## Run unit tests
+	go test ./...
+
+lint: fmt vet test ## Format, vet, and test
 
 ## ── Clean ────────────────────────────────────────────────────────────────────
 

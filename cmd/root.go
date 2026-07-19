@@ -59,34 +59,35 @@ Run 'git brief init' for first-time setup.`,
 		defer cancel()
 
 		desc := config.SinceDescription(daysFlag)
+		if sinceFlag != "" {
+			desc = "since " + sinceFlag
+		}
 
-		// ── Collect git commits ──────────────────────────────────────
 		gitResult := collector.CollectGitData(ctx, sinceFlag, daysFlag, workspaceFlag)
 		printWarnings(gitResult.Warnings)
 
-		// ── Collect GitHub PRs ────────────────────────────────────────
 		ghResult := collector.CollectGithubData(ctx, sinceFlag, daysFlag)
 		printWarnings(ghResult.Warnings)
 
-		// ── Generate brief ───────────────────────────────────────────
-		if len(gitResult.Commits) == 0 && len(ghResult.PRs) == 0 && len(gitResult.Uncommitted) == 0 {
-			warn.Println("\n⚠️  No commits, PRs, or uncommitted changes found. Nothing to summarise.")
-			warn.Printf("   Looked %s in %d repo(s).\n", desc, gitResult.Repos)
-			warn.Println("   Try: git brief --days 3")
+		if len(gitResult.Commits) == 0 && len(ghResult.PRs) == 0 && len(gitResult.Uncommitted) == 0 && len(gitResult.Stashed) == 0 {
+			warn.Printf("Nothing to summarise %s (%d repo(s)). Try --days 7\n", desc, gitResult.Repos)
 			return nil
 		}
 
-		brief, err := ai.SummarizeBrief(gitResult.Commits, ghResult.PRs, gitResult.Uncommitted, gitResult.Stashed)
+		brief, err := ai.SummarizeBrief(ctx, gitResult.Commits, ghResult.PRs, gitResult.Uncommitted, gitResult.Stashed)
 		if err != nil {
 			return fmt.Errorf("AI: %w", err)
 		}
 
 		output.PrintBrief(brief)
+
+		// Clipboard + Slack get Slack mrkdwn headers; terminal stays plain for colouring.
+		slackBrief := output.ForSlack(brief)
 		if !noClipboard {
-			output.CopyToClipboard(brief)
+			output.CopyToClipboard(slackBrief)
 		}
 
-		maybePostToSlack(ctx, brief)
+		maybePostToSlack(ctx, slackBrief)
 		return nil
 	},
 }
@@ -140,7 +141,7 @@ func maybePostToSlack(ctx context.Context, brief string) {
 		if postBriefToSlack(ctx, brief, channel, token) {
 			return
 		}
-		warn.Println("  ↪ falling back to opening Slack for a manual send…")
+		dim.Println("Post failed — opening Slack to paste instead…")
 	}
 	openSlackHandoff(ctx, brief, channel, token)
 }
@@ -164,9 +165,9 @@ func postBriefToSlack(ctx context.Context, brief, channel, token string) bool {
 	}
 
 	fmt.Println()
-	color.New(color.FgCyan).Printf("✅ Posted to Slack %s as you — no window needed.\n", channel)
+	color.New(color.FgCyan).Printf("✅ Posted to Slack\n")
 	if link, err := client.GetPermalink(ctx, channelID, ts); err == nil && link != "" {
-		dim.Printf("   %s\n", link)
+		dim.Println(link)
 	}
 	return true
 }
@@ -236,16 +237,11 @@ func openSlackHandoff(ctx context.Context, brief, channel, token string) {
 	}
 
 	fmt.Println()
-	dim.Println("  Opening Slack — your brief is on the clipboard.")
-	fmt.Printf("  Channel: %s\n", channel)
-	fmt.Printf("  Link:    %s\n", webLink)
 	if err := slack.OpenURL(ctx, openTarget); err != nil {
-		warn.Printf("  ⚠️  couldn't open Slack automatically: %v\n", err)
-		fmt.Printf("  Open this link manually: %s\n", openTarget)
+		warn.Printf("Couldn't open Slack: %v\nOpen: %s\n", err, openTarget)
+	} else {
+		dim.Printf("Opened Slack — paste from clipboard (%s)\n", webLink)
 	}
-	fmt.Println()
-	color.New(color.Bold).Println("  ➜ Paste (Cmd/Ctrl+V) into the channel, then press Enter to post as yourself.")
-	dim.Println("    Nothing is sent automatically — you have the final say in Slack.")
 }
 
 func hasAPIKey() bool {

@@ -42,16 +42,10 @@ One command. Three seconds. Your standup is written and copied to clipboard.
 ```
   git brief runs
        │
-       ├── scans your git commits from the last 24hrs
-       │   across all your local repositories
-       │
-       ├── fetches PRs you merged or reviewed on GitHub
-       │
-       └── sends one prompt to your configured AI provider
-                │
-                └── AI writes Yesterday / Today / Blockers
-                         │
-                         └── output printed + copied to clipboard
+       ├── local git: commits + uncommitted + stashes (your real work)
+       ├── GitHub: merged / reviewed / draft PRs + issues (optional)
+       ├── AI: theme-grouped Yesterday / Today / Blockers (one call)
+       └── Slack: clipboard (mrkdwn) → post as you, or open channel to paste
 ```
 
 One AI call per run. No chat, no back-and-forth, no wasted tokens.
@@ -115,7 +109,14 @@ git brief --since "monday"    # Custom time range
 git brief --days 3            # Last 3 days (returning from PTO)
 git brief -w ~/projects       # Override workspace directory
 git brief --no-clipboard      # Print only, skip clipboard
+
+# Slack (optional; configure via `git brief init`)
+git brief --slack             # Deliver without interactive confirm
+git brief --no-slack          # Skip Slack for this run
+git brief --slack-open        # Open Slack to paste/send (no API post)
 ```
+
+With a Slack user token (`xoxp-` + `chat:write`), `git brief` can post the brief to your channel as you. Without a token, paste a channel link during init — it opens that channel so you paste and send yourself.
 
 ## Supported AI Providers
 
@@ -144,7 +145,8 @@ $ git brief init
 ```sh
 make build     # Build bin/git-brief with version info
 make install   # Build + install to ~/.local/bin
-make lint      # Format + vet
+make lint      # Format + vet + test
+make test      # go test ./...
 make fmt       # gofmt -w .
 make clean     # Remove build artifacts
 ```

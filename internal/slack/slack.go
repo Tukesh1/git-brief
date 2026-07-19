@@ -1,10 +1,13 @@
-// Package slack implements a "manual approval" hand-off to Slack.
+// Package slack delivers standup briefs to Slack.
 //
-// git-brief never posts to Slack on the user's behalf. Instead it resolves the
-// target channel, copies the brief to the clipboard, and opens the Slack client
-// directly in that channel. The user pastes the brief and presses send
-// themselves — so the message is always posted *as the user* (never as a bot)
-// and only ever after explicit manual confirmation inside Slack.
+// Two modes are supported by the CLI:
+//   - Background post via chat.postMessage when a user token (xoxp-…) with
+//     chat:write is configured — the message is posted as that user, never as a bot.
+//   - Open hand-off: resolve/open the channel and leave paste+send to the user
+//     (no write scope required; a pasted channel link is enough).
+//
+// Approval (interactive confirm, or --slack for non-interactive) is enforced
+// in cmd, not in this package.
 package slack
 
 import (
@@ -39,9 +42,9 @@ func apiBase() string {
 	return defaultAPIBase
 }
 
-// Client is a minimal Slack Web API client. It uses a user token (xoxp-…) only
-// to look things up (resolve a channel name to an ID, discover the team ID); it
-// never posts messages.
+// Client is a minimal Slack Web API client authenticated with a user token
+// (xoxp-…). It can resolve channels, look up auth/team info, and post messages
+// as that user when the token has chat:write.
 type Client struct {
 	token string
 	http  *http.Client
