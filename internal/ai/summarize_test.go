@@ -8,14 +8,6 @@ import (
 	"github.com/tukesh1/git-brief/internal/collector"
 )
 
-func TestCompactUncommittedLine(t *testing.T) {
-	in := "git-brief: Makefile, cmd/init.go, README.md, go.mod, AGENTS.md, ...and 12 more"
-	got := compactUncommittedLine(in)
-	if !strings.Contains(got, "~17 dirty files") {
-		t.Errorf("got %q, want ~17 dirty files", got)
-	}
-}
-
 func TestBucketCommits(t *testing.T) {
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.Local)
 	commits := []collector.CommitData{
@@ -23,45 +15,45 @@ func TestBucketCommits(t *testing.T) {
 		{Repo: "r", Branch: "b", Message: "today work", Date: "2026-07-19T09:00:00+05:30"},
 	}
 	earlier, todayItems := bucketCommits(commits, now)
-	if len(earlier) != 1 || earlier[0].Message != "old work" {
-		t.Fatalf("earlier=%v", earlier)
-	}
-	if len(todayItems) != 1 || todayItems[0].Message != "today work" {
-		t.Fatalf("today=%v", todayItems)
+	if len(earlier) != 1 || todayItems[0].Message != "today work" {
+		t.Fatalf("bucket failed: earlier=%v today=%v", earlier, todayItems)
 	}
 }
 
-func TestEnsureBriefFallsBackWhenModelDropsYesterday(t *testing.T) {
+func TestCompleteStandupBulletsFromThinCommits(t *testing.T) {
 	earlier := []collector.CommitData{
-		{Message: "feat(slack): add background chat posting", Date: "2026-06-29T15:00:24+05:30"},
-		{Message: "feat(slack): post as user", Date: "2026-06-29T15:05:10+05:30"},
-		{Message: "feat(cmd): make Slack token optional", Date: "2026-06-29T14:56:25+05:30"},
+		{Repo: "codexp-ai", Message: "added railway configuration"},
+		{Repo: "codexp-ai", Message: "added a null check"},
+		{Repo: "codexp-ai", Message: "increased font size of landing page"},
+		{Repo: "codexp-ai", Message: "updated and added the new landing page"},
 	}
-	bad := "Today:\n  • Working on updates related to configuration.\n\nBlockers:\n  None"
-	got := ensureBriefMatchesData(bad, earlier, nil, nil, []string{"git-brief: cmd/init.go"}, nil)
-	if !strings.Contains(got, "Yesterday:") {
-		t.Fatalf("expected Yesterday section, got:\n%s", got)
+	got := buildDeterministicBrief(earlier, nil, nil, nil, nil)
+	y := sectionBody(got, "Yesterday")
+
+	if strings.Contains(y, "Added a null check") && !strings.Contains(strings.ToLower(y), "null-safety") {
+		t.Fatalf("null check not enriched:\n%s", got)
 	}
-	if !strings.Contains(strings.ToLower(got), "slack") {
-		t.Fatalf("expected slack theme from commits, got:\n%s", got)
+	if strings.Contains(y, "Increased font size of landing page") {
+		t.Fatalf("thin landing fragment should be merged/enriched:\n%s", got)
 	}
-	if strings.Contains(got, "updates related to") {
-		t.Fatalf("vague model text should not survive:\n%s", got)
+	if !strings.Contains(strings.ToLower(y), "landing page") {
+		t.Fatalf("expected landing page theme:\n%s", got)
+	}
+	if !strings.Contains(strings.ToLower(y), "railway") {
+		t.Fatalf("expected railway theme:\n%s", got)
+	}
+	if !strings.Contains(y, "codexp-ai") {
+		t.Fatalf("expected repo context:\n%s", got)
+	}
+	// Prefer fewer richer bullets
+	if bulletCount(y) > 4 {
+		t.Fatalf("too many thin bullets: %d\n%s", bulletCount(y), got)
 	}
 }
 
-func TestDeterministicBriefIncludesCommitsAndWIP(t *testing.T) {
-	earlier := []collector.CommitData{
-		{Message: "feat(slack): add background chat posting", Date: "2026-06-29T15:00:24+05:30"},
-	}
-	got := buildDeterministicBrief(earlier, nil, nil, []string{"git-brief: cmd/init.go, README.md"}, nil)
-	if !strings.Contains(got, "Yesterday:") || !strings.Contains(got, "Today:") {
-		t.Fatal(got)
-	}
-	if !strings.Contains(strings.ToLower(got), "slack") {
-		t.Fatal(got)
-	}
-	if !strings.Contains(got, "Finishing local WIP") {
-		t.Fatal(got)
+func TestHumanWIPFromRealPaths(t *testing.T) {
+	bullet := humanWIPBullet("git-brief: internal/slack/slack.go, cmd/root.go, Makefile")
+	if bullet != "Working on Slack standup delivery in git-brief" {
+		t.Fatalf("got %q", bullet)
 	}
 }

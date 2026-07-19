@@ -24,7 +24,6 @@ const (
 	// When there is already solid commit history, compress local WIP so a
 	// dirty tree does not drown out commits — but still include workspace signal.
 	commitRichThreshold = 5
-	maxSampleFiles      = 3
 )
 
 // SummarizeBrief builds a Slack standup from commits, PRs, and local workspace.
@@ -59,8 +58,8 @@ func SummarizeBrief(ctx context.Context, commits []collector.CommitData, prs []c
 	return ensureBriefMatchesData(brief, earlier, todayCommits, prs, uncommitted, stashed), nil
 }
 
-// buildUserPrompt pre-buckets activity the way an SDE thinks about standup:
-// done before today vs done today vs local WIP still on disk.
+// buildUserPrompt asks the model to rewrite a fact-grounded draft into complete,
+// teammate-readable standup bullets (not thin commit fragments).
 func buildUserPrompt(
 	now time.Time,
 	earlier, todayCommits []collector.CommitData,
@@ -68,30 +67,35 @@ func buildUserPrompt(
 	uncommitted, stashed []string,
 	commitCount int,
 ) string {
+	draft := buildDeterministicBrief(earlier, todayCommits, prs, uncommitted, stashed)
+
 	var b strings.Builder
-	fmt.Fprintf(&b, "Today is %s, %s.\n", now.Format("Monday"), now.Format("January 2, 2006"))
-	b.WriteString("Write a Slack standup from these pre-bucketed facts. Do not move items across buckets.\n")
-	b.WriteString("CRITICAL: If COMPLETED BEFORE TODAY is non-empty, Yesterday MUST list those themes (2-4 bullets). Never leave Yesterday empty when that bucket has commits.\n\n")
+	fmt.Fprintf(&b, "Today is %s, %s.\n\n", now.Format("Monday"), now.Format("January 2, 2006"))
+	b.WriteString("Rewrite the DRAFT standup below into a final Slack standup.\n")
+	b.WriteString("Rules:\n")
+	b.WriteString("- Keep the same Yesterday / Today / Blockers structure.\n")
+	b.WriteString("- Do NOT add work that is not implied by the draft or SOURCE FACTS.\n")
+	b.WriteString("- Make each bullet a complete, understandable phrase a teammate can read without context.\n")
+	b.WriteString("- Prefer 2-4 richer bullets over many thin fragments. Merge related items.\n")
+	b.WriteString("- Good: \"Updated the landing page (new page + larger fonts) in codexp-ai\"\n")
+	b.WriteString("- Bad: \"Added a null check\" or \"Increased font size of landing page\"\n")
+	b.WriteString("- No markdown, no tool jargon.\n\n")
 
-	b.WriteString("COMPLETED BEFORE TODAY (→ Yesterday section):\n")
+	b.WriteString("DRAFT:\n")
+	b.WriteString(draft)
+	b.WriteString("\n\nSOURCE FACTS (for fidelity only):\n")
+	b.WriteString("COMPLETED BEFORE TODAY:\n")
 	writeCommitBucket(&b, earlier)
-
-	b.WriteString("\nCOMPLETED TODAY (→ Today section):\n")
+	b.WriteString("\nCOMPLETED TODAY:\n")
 	writeCommitBucket(&b, todayCommits)
-
-	b.WriteString("\nGITHUB PR/ISSUE ACTIVITY (merged/reviewed → Yesterday; drafts/issues → Today):\n")
+	b.WriteString("\nGITHUB:\n")
 	for _, line := range formatPRs(prs) {
 		b.WriteString(line)
 		b.WriteByte('\n')
 	}
-
 	b.WriteString(formatLocalWorkspace(uncommitted, stashed, commitCount))
 
-	if len(earlier) == 0 && len(todayCommits) == 0 && len(prs) == 0 {
-		b.WriteString("\nNOTE: No commits/PRs in the selected time range. Base the brief on LOCAL WORKSPACE WIP only. Yesterday: \"No shipped commits since last standup\". Do not invent shipped work.\n")
-	}
-
-	b.WriteString("\nWrite my standup brief now.")
+	b.WriteString("\nWrite the final standup now.")
 	return b.String()
 }
 
@@ -225,68 +229,25 @@ func formatPRs(prs []collector.PRData) []string {
 	return prLines
 }
 
-// formatLocalWorkspace always surfaces uncommitted/stash signal (core product
-// goal), but compresses file lists when commit history is already rich so the
-// model does not invent a story from a long dirty tree alone.
+// formatLocalWorkspace surfaces uncommitted/stash as spoken Today lines for the
+// model — never raw "dirty file" dumps.
 func formatLocalWorkspace(uncommitted, stashed []string, commitCount int) string {
-	if len(uncommitted) == 0 && len(stashed) == 0 {
+	lines := humanWIPLinesForPrompt(uncommitted, stashed)
+	if len(lines) == 0 {
 		return ""
 	}
-
 	var b strings.Builder
 	if commitCount >= commitRichThreshold {
-		b.WriteString("\nLOCAL WORKSPACE WIP (→ Today; one short bullet; do not invent beyond these paths):\n")
-		for _, line := range uncommitted {
-			b.WriteString("  ")
-			b.WriteString(compactUncommittedLine(line))
-			b.WriteByte('\n')
-		}
+		b.WriteString("\nLOCAL WORKSPACE WIP (→ Today; keep to one short spoken bullet):\n")
 	} else {
-		b.WriteString("\nLOCAL WORKSPACE WIP (→ Today; primary signal when commits are empty/sparse):\n")
-		for _, line := range uncommitted {
-			b.WriteString("  ")
-			b.WriteString(line)
-			b.WriteByte('\n')
-		}
+		b.WriteString("\nLOCAL WORKSPACE WIP (→ Today; primary signal when commits are sparse):\n")
 	}
-	if len(stashed) > 0 {
-		b.WriteString("STASHED WORK (→ Today):\n")
-		for _, line := range stashed {
-			b.WriteString("  ")
-			b.WriteString(line)
-			b.WriteByte('\n')
-		}
+	for _, line := range lines {
+		b.WriteString("  ")
+		b.WriteString(line)
+		b.WriteByte('\n')
 	}
 	return b.String()
-}
-
-func compactUncommittedLine(line string) string {
-	repo, filesPart, ok := strings.Cut(line, ": ")
-	if !ok {
-		return line
-	}
-	parts := splitFileList(filesPart)
-	extra := 0
-	var files []string
-	for _, p := range parts {
-		if strings.HasPrefix(p, "...and ") {
-			var n int
-			if _, err := fmt.Sscanf(p, "...and %d more", &n); err == nil {
-				extra = n
-			}
-			continue
-		}
-		files = append(files, p)
-	}
-	total := len(files) + extra
-	if total == 0 {
-		return line
-	}
-	sample := files
-	if len(sample) > maxSampleFiles {
-		sample = sample[:maxSampleFiles]
-	}
-	return fmt.Sprintf("%s: ~%d dirty files (sample: %s)", repo, total, strings.Join(sample, ", "))
 }
 
 func splitFileList(s string) []string {
