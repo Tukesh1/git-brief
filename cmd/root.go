@@ -69,12 +69,16 @@ Run 'git brief init' for first-time setup.`,
 		ghResult := collector.CollectGithubData(ctx, sinceFlag, daysFlag)
 		printWarnings(ghResult.Warnings)
 
-		if len(gitResult.Commits) == 0 && len(ghResult.PRs) == 0 && len(gitResult.Uncommitted) == 0 && len(gitResult.Stashed) == 0 {
+		// Prefer GitHub API PRs when available; always include local merge commits
+		// so merged PRs show up even without a GitHub token.
+		prs := mergePRLists(ghResult.PRs, gitResult.MergedPRs)
+
+		if len(gitResult.Commits) == 0 && len(prs) == 0 && len(gitResult.Uncommitted) == 0 && len(gitResult.Stashed) == 0 {
 			warn.Printf("Nothing to summarise %s (%d repo(s)). Try --days 7\n", desc, gitResult.Repos)
 			return nil
 		}
 
-		brief, err := ai.SummarizeBrief(ctx, gitResult.Commits, ghResult.PRs, gitResult.Uncommitted, gitResult.Stashed)
+		brief, err := ai.SummarizeBrief(ctx, gitResult.Commits, prs, gitResult.Uncommitted, gitResult.Stashed)
 		if err != nil {
 			return fmt.Errorf("AI: %w", err)
 		}
@@ -260,6 +264,29 @@ func printWarnings(warnings []collector.Warning) {
 	for _, w := range warnings {
 		warn.Printf("  ⚠️  %s\n", w)
 	}
+}
+
+// mergePRLists prefers API results, then fills gaps from local merge commits.
+func mergePRLists(api, local []collector.PRData) []collector.PRData {
+	if len(local) == 0 {
+		return api
+	}
+	seen := make(map[string]bool, len(api)+len(local))
+	out := make([]collector.PRData, 0, len(api)+len(local))
+	for _, p := range api {
+		key := fmt.Sprintf("%s#%d", p.RepoName, p.Number)
+		seen[key] = true
+		out = append(out, p)
+	}
+	for _, p := range local {
+		key := fmt.Sprintf("%s#%d", p.RepoName, p.Number)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 // Execute is the binary entry point called from main.go.
