@@ -1,4 +1,4 @@
-<h1 align="center"><code>git-brief</code></h1>
+<h1 align="center"><code>git brief</code></h1>
 <p align="center">
   <img
     alt="Platform"
@@ -11,12 +11,12 @@
   /></a>
 </p>
 
-<p align="center">A CLI tool that writes your daily standup for you using your local Git history and GitHub activity.</p>
+<p align="center">A CLI that writes your daily Slack standup from local git activity, GitHub PRs, and in-progress workspace work.</p>
 
 ```text
 $ git brief
 
-📋 brief - Thursday, June 26
+📋 brief — Thursday, June 26
 
 Yesterday:
   • Fixed auth token expiry bug in /api/refresh (PR #234 merged)
@@ -30,27 +30,29 @@ Today:
 Blockers:
   None
 
-📋 Copied to clipboard. Paste into Slack.
+📋 Copied to clipboard
+✅ Posted to Slack
 ```
 
 ## How it works
 
-1. It scans your local git commits (defaulting to yesterday, and automatically skipping weekends).
-2. It fetches PRs you merged or reviewed via the GitHub API.
-3. It bundles that data into a strict prompt and sends it to your LLM provider.
-4. It outputs your standup to the terminal and copies it to your clipboard.
+1. Scans local git commits (defaults to yesterday; skips weekends automatically), plus uncommitted and stashed work.
+2. Optionally fetches PRs you merged or reviewed via the GitHub API.
+3. Builds a teammate-ready Yesterday / Today / Blockers standup (one AI call, with a data-backed fallback).
+4. Copies a Slack-ready brief to the clipboard, then posts as you or opens the channel to paste.
 
-It makes exactly one API call per run. No chat interfaces, no wasted tokens.
+One AI call per run. No chat interfaces, no wasted tokens.
 
 ## Features that catch edge cases
 
 Traditional `git log` tools usually miss half of what you actually do in a day. `git-brief` is built to catch the edge cases:
 
-* **Uncommitted work:** It runs `git status` to include files you are actively modifying.
-* **Git stashes:** It checks your recent stashes for work you had to pause.
-* **Pair programming:** It parses `Co-authored-by:` tags in commit messages so you get credit when pairing.
-* **Rebase-aware:** It strictly looks at the commit date (`%cI`), meaning rebased commits aren't lost if the author date is old.
-* **Draft PRs & Issues:** It tracks open PRs and issues you've commented on, not just what was merged.
+* **Uncommitted work:** Includes files you are actively modifying (`git status`), ignoring tooling/build noise.
+* **Git stashes:** Checks recent stashes for paused work.
+* **Pair programming:** Parses `Co-authored-by:` tags so you get credit when pairing.
+* **Rebase-aware:** Uses committer date (`%cI`) so rebased commits are not lost.
+* **Draft PRs & Issues:** Tracks open/draft PRs and issue activity, not just merges.
+* **Slack delivery:** Posts as you with a user token, or opens the channel for a manual paste.
 
 ## Installation
 
@@ -69,53 +71,48 @@ make install
 
 ## Quick start
 
-Run the setup wizard to configure your workspaces and API keys:
 ```sh
-git brief init
+git brief init   # workspaces, LLM key, optional GitHub + Slack
+git brief        # generate today's standup
 ```
 
-Then generate your standup:
-```sh
-git brief
-```
-
-## Advanced Usage
+## Usage
 
 ```sh
 git brief                     # Generate today's standup
 git brief init                # Run the setup wizard
-git brief config              # Show your config (keys masked)
+git brief config              # Show config path + masked contents
 git brief version             # Print the installed version
 
-# Useful Overrides
+# Overrides
 git brief --since "monday"    # Custom time range
 git brief --days 3            # Look back 3 days
-git brief -w ~/projects       # Scan a specific directory instead of config defaults
-git brief --no-clipboard      # Print only, skip clipboard copy
+git brief -w ~/projects       # Scan a specific directory
+git brief --no-clipboard      # Print only, skip clipboard
+
+# Slack
+git brief --slack             # Deliver without interactive confirm
+git brief --no-slack          # Skip Slack for this run
+git brief --slack-open        # Open Slack to paste/send (no API post)
 ```
 
-## Slack Integration
+## Slack integration
 
-If you want `git-brief` to post directly to Slack instead of copying to your clipboard, you have two options:
-
-### 1. Background Send (API Token)
-Set a Slack user token (`xoxp-...`) and a channel in your config (`git brief init`). It will post the standup as you.
+### 1. Background send (API token)
+Set a Slack user token (`xoxp-...` with `chat:write`) and a channel via `git brief init`. Posts the standup as you.
 ```sh
-git brief            # Prompts you to confirm, then posts
-git brief --slack    # Posts immediately without confirmation
-git brief --no-slack # Skips Slack entirely
+git brief            # Confirm, then post
+git brief --slack    # Post immediately
+git brief --no-slack # Skip Slack
 ```
 
-### 2. Open Hand-off (Browser)
-If you don't want to use an API token, you can just set a channel link in your config.
+### 2. Open hand-off (no token)
+Set a channel link or ID in config. Copies the brief and opens Slack so you paste and send yourself.
 ```sh
 git brief --slack-open
 ```
-This copies the brief to your clipboard and automatically opens the Slack app to your specified channel so you can hit paste.
 
 ## Supported AI providers
-
-Because `git-brief` only sends commit metadata (and never your source code), context windows are extremely small and cheap.
 
 | Provider | Model | Cost per standup |
 |---|---|---|
@@ -128,9 +125,11 @@ You bring your own API key. There is no subscription and no backend.
 ## Development
 
 ```sh
-make build     # Compile the binary
-make install   # Compile and copy to ~/.local/bin
-make lint      # Format and vet the code
+make build     # Build bin/git-brief with version info
+make install   # Build + install to ~/.local/bin
+make lint      # Format + vet + test
+make test      # go test ./...
+make fmt       # gofmt -w .
 make clean     # Remove build artifacts
 ```
 

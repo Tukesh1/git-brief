@@ -49,7 +49,7 @@ func CopyToClipboard(brief string) {
 	if err := copyToClipboard(text); err != nil {
 		errorStyle.Printf("⚠️  Could not copy to clipboard: %v\n", err)
 	} else {
-		successStyle.Println("📋 Copied to clipboard. Paste into Slack.")
+		successStyle.Println("📋 Copied to clipboard")
 	}
 }
 

@@ -39,6 +39,8 @@ var configCmd = &cobra.Command{
 			AnthropicAPIKey string   `json:"anthropic_api_key"`
 			GeminiAPIKey    string   `json:"gemini_api_key"`
 			OpenAIAPIKey    string   `json:"openai_api_key"`
+			SlackToken      string   `json:"slack_token"`
+			SlackChannel    string   `json:"slack_channel"`
 		}
 
 		cfg := config.Cfg
@@ -52,6 +54,8 @@ var configCmd = &cobra.Command{
 			AnthropicAPIKey: maskKey(cfg.AnthropicAPIKey),
 			GeminiAPIKey:    maskKey(cfg.GeminiAPIKey),
 			OpenAIAPIKey:    maskKey(cfg.OpenAIAPIKey),
+			SlackToken:      maskKey(cfg.SlackToken),
+			SlackChannel:    cfg.SlackChannel,
 		}
 
 		out, _ := json.MarshalIndent(d, "", "  ")

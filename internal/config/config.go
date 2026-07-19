@@ -21,6 +21,8 @@ type Config struct {
 	AnthropicAPIKey string   `mapstructure:"anthropic_api_key" json:"anthropic_api_key"`
 	GeminiAPIKey    string   `mapstructure:"gemini_api_key"   json:"gemini_api_key"`
 	OpenAIAPIKey    string   `mapstructure:"openai_api_key"   json:"openai_api_key"`
+	SlackToken      string   `mapstructure:"slack_token"      json:"slack_token"`
+	SlackChannel    string   `mapstructure:"slack_channel"    json:"slack_channel"`
 }
 
 // Cfg is the global configuration instance, populated by InitConfig.
@@ -127,5 +129,10 @@ func SaveConfig() error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	// 0600 so API tokens are not world-readable. Chmod after write so an
+	// existing file previously created with a looser mode is tightened.
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }

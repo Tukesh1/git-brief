@@ -109,17 +109,17 @@ func findGitRepos(ctx context.Context, baseDirs []string) ([]string, []Warning) 
 
 // getGitIdent resolves the git author identity (name, email) to filter commits.
 // Priority: config.Cfg.Author/Email → git config user.name/email.
-func getGitIdent() (string, string) {
+func getGitIdent(ctx context.Context) (string, string) {
 	name := config.Cfg.Author
 	email := config.Cfg.Email
 
 	if name == "" {
-		if out, err := exec.Command("git", "config", "user.name").Output(); err == nil {
+		if out, err := exec.CommandContext(ctx, "git", "config", "user.name").Output(); err == nil {
 			name = strings.TrimSpace(string(out))
 		}
 	}
 	if email == "" {
-		if out, err := exec.Command("git", "config", "user.email").Output(); err == nil {
+		if out, err := exec.CommandContext(ctx, "git", "config", "user.email").Output(); err == nil {
 			email = strings.TrimSpace(string(out))
 		}
 	}
@@ -147,7 +147,7 @@ type CollectResult struct {
 func CollectGitData(ctx context.Context, since string, days int, workspaces []string) CollectResult {
 	var result CollectResult
 
-	authorNameCfg, authorEmailCfg := getGitIdent()
+	authorNameCfg, authorEmailCfg := getGitIdent(ctx)
 	if authorNameCfg == "" && authorEmailCfg == "" {
 		result.Warnings = append(result.Warnings, Warning("could not determine git author name/email — commits may not be filtered correctly"))
 	}
@@ -219,25 +219,39 @@ func CollectGitData(ctx context.Context, since string, days int, workspaces []st
 			}
 		}
 
-		// Check for uncommitted changes
+		// Check for uncommitted changes (skip tooling/build noise paths).
 		statusCmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
 		statusCmd.Dir = repoPath
 		statusOut, err := statusCmd.Output()
 		if err == nil {
 			lines := strings.Split(string(bytes.TrimSpace(statusOut)), "\n")
-			if len(lines) > 0 && lines[0] != "" {
-				var files []string
-				for i, line := range lines {
-					if i >= 5 {
-						files = append(files, fmt.Sprintf("...and %d more", len(lines)-5))
-						break
-					}
-					if len(line) > 3 {
-						files = append(files, line[3:]) // skip the " M " prefix
-					}
+			var raw []string
+			for _, line := range lines {
+				if line == "" {
+					continue
 				}
-				result.Uncommitted = append(result.Uncommitted, fmt.Sprintf("%s: %s", repoName, strings.Join(files, ", ")))
+				path := line
+				if len(line) > 3 {
+					path = strings.TrimSpace(line[3:]) // skip status prefix
+				}
+				// Renames look like "old -> new"
+				if i := strings.Index(path, " -> "); i >= 0 {
+					path = path[i+4:]
+				}
+				raw = append(raw, path)
 			}
+			files := MeaningfulFiles(raw)
+			if len(files) == 0 {
+				continue
+			}
+			shown := files
+			extra := ""
+			if len(shown) > 5 {
+				extra = fmt.Sprintf(", ...and %d more", len(shown)-5)
+				shown = shown[:5]
+			}
+			result.Uncommitted = append(result.Uncommitted,
+				fmt.Sprintf("%s: %s%s", repoName, strings.Join(shown, ", "), extra))
 		}
 
 		// Also check for recent stashes

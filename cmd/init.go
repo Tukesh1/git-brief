@@ -56,11 +56,19 @@ func runInitWizard() error {
 	}
 
 	// ── LLM provider ───────────────────────────────────────────
+	providerDefault := "Google (Gemini) — free tier available"
+	switch config.Cfg.LLMProvider {
+	case "anthropic":
+		providerDefault = "Anthropic (Claude)"
+	case "openai":
+		providerDefault = "OpenAI (GPT)"
+	}
+
 	var providerChoice string
 	if err := survey.AskOne(&survey.Select{
 		Message: "LLM provider:",
 		Options: []string{"Google (Gemini) — free tier available", "Anthropic (Claude)", "OpenAI (GPT)"},
-		Default: "Google (Gemini) — free tier available",
+		Default: providerDefault,
 	}, &providerChoice); err != nil {
 		return fmt.Errorf("setup cancelled")
 	}
@@ -102,6 +110,38 @@ func runInitWizard() error {
 		}
 	}
 
+	// ── Slack (optional) ───────────────────────────────────────
+	// With a chat:write user token, git-brief can post as you in the background.
+	// Without a token it opens the channel so you paste and send yourself.
+	var useSlack bool
+	_ = survey.AskOne(&survey.Confirm{
+		Message: "Enable Slack delivery? (optional token posts as you; otherwise opens channel to paste)",
+		Default: config.Cfg.SlackChannel != "",
+	}, &useSlack)
+
+	if useSlack {
+		fmt.Println("  Tip: in Slack, open the channel ▸ click its name ▸ Copy link, and paste it below.")
+		if err := survey.AskOne(&survey.Input{
+			Message: "Slack channel (paste a channel link, or #name, or a channel ID like C0123ABCD):",
+			Default: config.Cfg.SlackChannel,
+		}, &config.Cfg.SlackChannel); err != nil {
+			return fmt.Errorf("setup cancelled")
+		}
+		// The token is OPTIONAL. With a chat:write user token (xoxp-…) git-brief
+		// can post the brief in the background as you (no window, no pasting).
+		// Without one it opens the channel so you paste and send manually — which
+		// needs no token and no workspace-admin rights.
+		fmt.Println("  Optional: an xoxp- user token with chat:write lets git-brief post in the background as you.")
+		fmt.Println("  Leave blank to keep the current token, or to skip (open/paste mode) if none is set.")
+		if err := askSecret("Slack user token (optional):", &config.Cfg.SlackToken); err != nil {
+			return err
+		}
+	} else {
+		// Clear them if they disabled it
+		config.Cfg.SlackToken = ""
+		config.Cfg.SlackChannel = ""
+	}
+
 	// ── Persist ────────────────────────────────────────────────
 	if err := config.SaveConfig(); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
@@ -114,9 +154,27 @@ func runInitWizard() error {
 	return nil
 }
 
+// askSecret prompts for a secret. An empty answer keeps the existing value in
+// dest when one is already set, so re-running init does not wipe API keys.
 func askSecret(message string, dest *string) error {
-	if err := survey.AskOne(&survey.Password{Message: message}, dest); err != nil {
+	existing := *dest
+	prompt := message
+	if existing != "" {
+		prompt = message + " (Enter to keep existing)"
+	}
+
+	var input string
+	if err := survey.AskOne(&survey.Password{Message: prompt}, &input); err != nil {
 		return fmt.Errorf("setup cancelled")
 	}
+	*dest = resolveSecretInput(input, existing)
 	return nil
+}
+
+// resolveSecretInput returns input when non-empty after trim; otherwise existing.
+func resolveSecretInput(input, existing string) string {
+	if strings.TrimSpace(input) == "" {
+		return existing
+	}
+	return input
 }
