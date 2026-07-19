@@ -7,10 +7,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/tukesh1/git-brief/internal/config"
 )
+
+// Matches GitHub-style merge commits, e.g.
+//
+//	Merge pull request #6 from Tukesh1/slack-integration
+var prMergeSubject = regexp.MustCompile(`(?i)^Merge pull request #(\d+) from\s+(\S+)`)
 
 // CommitData holds information about a single git commit.
 type CommitData struct {
@@ -137,6 +144,7 @@ func getSinceArg(override string, days int) string {
 // CollectResult holds the output of a git data collection run.
 type CollectResult struct {
 	Commits     []CommitData
+	MergedPRs   []PRData // from local "Merge pull request #N" commits (no GitHub token needed)
 	Uncommitted []string // list of repos with uncommitted changes
 	Stashed     []string // list of recent stashes
 	Warnings    []Warning
@@ -219,6 +227,10 @@ func CollectGitData(ctx context.Context, since string, days int, workspaces []st
 			}
 		}
 
+		// Local PR merges are excluded by --no-merges above. Capture them so a
+		// merged PR still appears in the standup without a GitHub API token.
+		result.MergedPRs = append(result.MergedPRs, collectLocalMergedPRs(ctx, repoPath, repoName, sinceArg, authorNameCfg, authorEmailCfg)...)
+
 		// Check for uncommitted changes (skip tooling/build noise paths).
 		statusCmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
 		statusCmd.Dir = repoPath
@@ -241,17 +253,16 @@ func CollectGitData(ctx context.Context, since string, days int, workspaces []st
 				raw = append(raw, path)
 			}
 			files := MeaningfulFiles(raw)
-			if len(files) == 0 {
-				continue
+			if len(files) > 0 {
+				shown := files
+				extra := ""
+				if len(shown) > 5 {
+					extra = fmt.Sprintf(", ...and %d more", len(shown)-5)
+					shown = shown[:5]
+				}
+				result.Uncommitted = append(result.Uncommitted,
+					fmt.Sprintf("%s: %s%s", repoName, strings.Join(shown, ", "), extra))
 			}
-			shown := files
-			extra := ""
-			if len(shown) > 5 {
-				extra = fmt.Sprintf(", ...and %d more", len(shown)-5)
-				shown = shown[:5]
-			}
-			result.Uncommitted = append(result.Uncommitted,
-				fmt.Sprintf("%s: %s%s", repoName, strings.Join(shown, ", "), extra))
 		}
 
 		// Also check for recent stashes
@@ -268,4 +279,72 @@ func CollectGitData(ctx context.Context, since string, days int, workspaces []st
 	}
 
 	return result
+}
+
+// collectLocalMergedPRs finds GitHub-style merge commits authored by the user.
+// These are omitted from the normal commit list (--no-merges) but are important
+// standup signal when no GitHub token is configured.
+func collectLocalMergedPRs(ctx context.Context, repoPath, repoName, sinceArg, authorNameCfg, authorEmailCfg string) []PRData {
+	logCmd := exec.CommandContext(ctx, "git", "log", "--all", "--merges",
+		"--since="+sinceArg,
+		"--format=%aN%x00%aE%x00%s%x00%ci",
+	)
+	logCmd.Dir = repoPath
+	logOut, err := logCmd.Output()
+	if err != nil || len(bytes.TrimSpace(logOut)) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var out []PRData
+	for _, line := range strings.Split(string(bytes.TrimSpace(logOut)), "\n") {
+		parts := strings.SplitN(line, "\x00", 4)
+		if len(parts) < 3 {
+			continue
+		}
+		authorName := parts[0]
+		authorEmail := parts[1]
+		subject := parts[2]
+
+		if !isLocalAuthor(authorName, authorEmail, authorNameCfg, authorEmailCfg) {
+			continue
+		}
+		m := prMergeSubject.FindStringSubmatch(subject)
+		if m == nil {
+			continue
+		}
+		num, err := strconv.Atoi(m[1])
+		if err != nil || num <= 0 {
+			continue
+		}
+		key := fmt.Sprintf("%s#%d", repoName, num)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		branchRef := m[2] // e.g. Tukesh1/slack-integration
+		title := branchRef
+		if i := strings.LastIndex(branchRef, "/"); i >= 0 && i+1 < len(branchRef) {
+			title = strings.ReplaceAll(branchRef[i+1:], "-", " ")
+		}
+
+		out = append(out, PRData{
+			Number:   num,
+			Title:    title,
+			RepoName: repoName,
+			Type:     "merged",
+		})
+	}
+	return out
+}
+
+func isLocalAuthor(authorName, authorEmail, authorNameCfg, authorEmailCfg string) bool {
+	if authorNameCfg != "" && strings.EqualFold(authorName, authorNameCfg) {
+		return true
+	}
+	if authorEmailCfg != "" && strings.EqualFold(authorEmail, authorEmailCfg) {
+		return true
+	}
+	return false
 }
