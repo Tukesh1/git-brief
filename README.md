@@ -11,11 +11,9 @@
   /></a>
 </p>
 
-<h3 align="center">Stop writing standup. You already logged the work..</h3>
+<p align="center">A CLI that writes your daily Slack standup from local git activity, GitHub PRs, and in-progress workspace work.</p>
 
-<br />
-
-```
+```text
 $ git brief
 
 📋 brief — Thursday, June 26
@@ -32,67 +30,50 @@ Today:
 Blockers:
   None
 
-📋 Copied to clipboard. Paste into Slack.
+📋 Copied to clipboard
+✅ Posted to Slack
 ```
-
-One command. Three seconds. Your standup is written and copied to clipboard.
 
 ## How it works
 
-```
-  git brief runs
-       │
-       ├── local git: commits + uncommitted + stashes (your real work)
-       ├── GitHub: merged / reviewed / draft PRs + issues (optional)
-       ├── AI: theme-grouped Yesterday / Today / Blockers (one call)
-       └── Slack: clipboard (mrkdwn) → post as you, or open channel to paste
-```
+1. Scans local git commits (defaults to yesterday; skips weekends automatically), plus uncommitted and stashed work.
+2. Optionally fetches PRs you merged or reviewed via the GitHub API.
+3. Builds a teammate-ready Yesterday / Today / Blockers standup (one AI call, with a data-backed fallback).
+4. Copies a Slack-ready brief to the clipboard, then posts as you or opens the channel to paste.
 
-One AI call per run. No chat, no back-and-forth, no wasted tokens.
+One AI call per run. No chat interfaces, no wasted tokens.
 
-### ✨ What it catches that others miss:
-- **Uncommitted work:** Captures modified files from your IDE using `git status`.
-- **Git Stashes:** Finds recent work you had to `git stash` and switch away from.
-- **Pair Programming:** Parses `Co-authored-by:` tags so you get credit when pairing.
-- **Rebase-aware:** Uses `Commit Date` instead of just Author Date so rebased commits aren't lost.
-- **GitHub Issues & Draft PRs:** Finds Open/Draft PRs you're working on and issues you've commented on, not just merged PRs.
+## Features that catch edge cases
 
-## Install
+Traditional `git log` tools usually miss half of what you actually do in a day. `git-brief` is built to catch the edge cases:
 
-### Go install (recommended)
+* **Uncommitted work:** Includes files you are actively modifying (`git status`), ignoring tooling/build noise.
+* **Git stashes:** Checks recent stashes for paused work.
+* **Pair programming:** Parses `Co-authored-by:` tags so you get credit when pairing.
+* **Rebase-aware:** Uses committer date (`%cI`) so rebased commits are not lost.
+* **Draft PRs & Issues:** Tracks open/draft PRs and issue activity, not just merges.
+* **Slack delivery:** Posts as you with a user token, or opens the channel for a manual paste.
 
+## Installation
+
+**Using Go (Recommended)**
 ```sh
 go install github.com/tukesh1/git-brief@latest
 ```
 
-### Build from source
-
+**Build from source**
 ```sh
 git clone https://github.com/tukesh1/git-brief.git
 cd git-brief
 make install
 ```
+*Note: The binary installs to `~/.local/bin/git-brief`. Make sure that folder is in your `$PATH`.*
 
-The binary is installed to `~/.local/bin/git-brief`. Make sure `~/.local/bin` is in your PATH.
-
-## Quick Start
+## Quick start
 
 ```sh
-# One-time setup (takes 60 seconds)
-$ git brief init
-
-  Welcome to git-brief setup!
-
-  ? LLM provider: Google 
-  ? Gemini API Key: ********
-  ? Enable GitHub PR integration? Yes
-  ? GitHub Personal Access Token: ********
-  ? GitHub username: tukesh1
-
-  ✅ Setup complete!
-
-# Generate your standup every morning
-$ git brief
+git brief init   # workspaces, LLM key, optional GitHub + Slack
+git brief        # generate today's standup
 ```
 
 ## Usage
@@ -101,44 +82,45 @@ $ git brief
 git brief                     # Generate today's standup
 git brief init                # Run the setup wizard
 git brief config              # Show config path + masked contents
-git brief version             # Print version
-git brief --version           # Same
+git brief version             # Print the installed version
 
 # Overrides
 git brief --since "monday"    # Custom time range
-git brief --days 3            # Last 3 days (returning from PTO)
-git brief -w ~/projects       # Override workspace directory
+git brief --days 3            # Look back 3 days
+git brief -w ~/projects       # Scan a specific directory
 git brief --no-clipboard      # Print only, skip clipboard
 
-# Slack (optional; configure via `git brief init`)
+# Slack
 git brief --slack             # Deliver without interactive confirm
 git brief --no-slack          # Skip Slack for this run
 git brief --slack-open        # Open Slack to paste/send (no API post)
 ```
 
-With a Slack user token (`xoxp-` + `chat:write`), `git brief` can post the brief to your channel as you. Without a token, paste a channel link during init — it opens that channel so you paste and send yourself.
+## Slack integration
 
-## Supported AI Providers
+### 1. Background send (API token)
+Set a Slack user token (`xoxp-...` with `chat:write`) and a channel via `git brief init`. Posts the standup as you.
+```sh
+git brief            # Confirm, then post
+git brief --slack    # Post immediately
+git brief --no-slack # Skip Slack
+```
+
+### 2. Open hand-off (no token)
+Set a channel link or ID in config. Copies the brief and opens Slack so you paste and send yourself.
+```sh
+git brief --slack-open
+```
+
+## Supported AI providers
 
 | Provider | Model | Cost per standup |
 |---|---|---|
-| **Google Gemini** | gemini-2.5-flash | Free tier available |
-| **Anthropic** | claude-3.5-haiku | ~$0.001 |
-| **OpenAI** | gpt-4o-mini | ~$0.001 |
+| Google Gemini | `gemini-2.5-flash` | Free tier available |
+| Anthropic | `claude-3.5-haiku` | ~$0.001 |
+| OpenAI | `gpt-4o-mini` | ~$0.001 |
 
-You bring your own API key. No subscription, no backend, no server costs.
-
-## Configuration
-
-Config is stored at `~/.config/git-brief/config.json`.
-
-```sh
-# View your current config (API keys are masked)
-$ git brief config
-
-# Re-run the setup wizard
-$ git brief init
-```
+You bring your own API key. There is no subscription and no backend.
 
 ## Development
 
@@ -151,7 +133,7 @@ make fmt       # gofmt -w .
 make clean     # Remove build artifacts
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
